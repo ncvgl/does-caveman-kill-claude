@@ -4,7 +4,7 @@
 TLDR; [Caveman](https://github.com/JuliusBrussee/caveman) uses **~14% fewer output tokens**, with **no statistically significant quality degradation** when tested on a hundred agentic coding tasks. 
 
 ## Setup
-Making LLMs talk like cavemen save output tokens ("why use many token when few token do trick"). 
+Making LLMs talk like cavemen saves output tokens ("why use many token when few token do trick"). 
 
 We tested here whether the [ultra caveman](https://github.com/JuliusBrussee/caveman) system prompt hurts **Claude Code + Haiku 4.5** on [SWE-bench Pro (public)](https://github.com/scaleapi/SWE-bench_Pro-os) ([HF dataset](https://huggingface.co/datasets/ScaleAI/SWE-bench_Pro_Public)).
 
