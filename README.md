@@ -21,7 +21,11 @@ We tested here whether the [ultra caveman](https://github.com/JuliusBrussee/cave
 | Avg cost/run | $0.41 | $0.37 | −12% |
 | Avg output tokens/run | 15.3 k | 13.2 k | −14% |
 
-Resolved instances: 79 both / 7 baseline-only / 4 caveman-only / 2 neither / 8 experiment errors. 
+Resolved instances: 79 both / 7 baseline-only / 4 caveman-only / 2 neither / 8 experiment errors.
+
+![Mosaic of all 731 SWE-bench Pro Public instances ordered by difficulty. Each cell is one instance, split into top = baseline and bottom = caveman-ultra. Green = resolved, red = failed, gray = not attempted. Our 101-instance frontier band (ranks 100–200) appears as a colored stripe across the gray.](caveman_vs_baseline_mosaic.png)
+
+*731 SWE-bench Pro Public instances ordered by difficulty (easiest → hardest, left-to-right, top-to-bottom). Top half of each cell = baseline; bottom half = caveman-ultra. Green = resolved, red = failed, gray = not tested.*
 
 ## Interpretation
 
