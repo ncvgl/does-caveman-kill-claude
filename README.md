@@ -39,6 +39,6 @@ Resolved instances: 79 both / 7 baseline-only / 4 caveman-only / 2 neither / 8 e
 
 ## Files
 
-- `data/experiments.csv` — one row per (instance, condition); 31 columns including resolve outcome, tokens, cost, and pointers to session/patch artifacts.
 - `scripts/run_one.sh` — per-(instance, condition) orchestrator: clones repo, runs setup, invokes claude, produces patch, calls grader, logs to CSV.
 - `sessions/` — full claude JSONL session transcripts (one per run).
+- `data/experiments.csv` — one row per (instance, condition); 31 columns including resolve outcome, tokens, cost, and pointers to session/patch artifacts.
