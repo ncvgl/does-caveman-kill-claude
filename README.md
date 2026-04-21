@@ -31,7 +31,7 @@ Resolved instances: 79 both / 7 baseline-only / 4 caveman-only / 2 neither / 8 e
 
 ![Histogram of per-instance output-token savings from caveman vs baseline, binned in 10% intervals. Green bars (right of zero) = caveman used fewer tokens; red bars (left of zero) = caveman used more.](token_savings_histogram.png)
 
-*Per-instance output-token savings, 10% bins. The average (−14%) hides huge variance: caveman saved tokens on 66% of instances (up to −71%) but used **more** tokens on 34% (up to +102%, i.e. it doubled the output on one run — driven by extra turns and tool calls, not longer prose; the narrative text stays shorter, but caveman does more exploratory Read/Grep calls which add up).*
+*Per-instance output-token savings, 10% bins. The average (−14%) hides huge variance: caveman saved tokens on 66% of instances (up to −71%) but used **more** tokens on 34% (up to +102%, i.e. it doubled the output on one run — driven by extra turns and tool calls).*
 
 ## Interpretation
 
