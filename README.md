@@ -29,6 +29,10 @@ Resolved instances: 79 both / 7 baseline-only / 4 caveman-only / 2 neither / 8 e
 
 *731 SWE-bench Pro Public instances ordered by difficulty (easiest → hardest, left-to-right, top-to-bottom). Top half of each cell = baseline; bottom half = caveman-ultra. Green = resolved, red = failed, gray = not tested.*
 
+![Histogram of per-instance output-token savings from caveman vs baseline, binned in 10% intervals. Green bars (right of zero) = caveman used fewer tokens; red bars (left of zero) = caveman used more.](token_savings_histogram.png)
+
+*Per-instance output-token savings, 10% bins. The average (−14%) hides huge variance: caveman saved tokens on 66% of instances (up to −71%) but used **more** tokens on 34% (up to +102%, i.e. it doubled the output on one run).*
+
 ## Interpretation
 
 - The **14% output-token savings** is far below the ~65% the caveman repo advertises for natural-language chat. Reason: in an agentic coding loop, most tokens go to tool-call JSON, file contents, code edits, and patches — **structured output that can't be compressed into caveman-speak**. Only the model's narrative/thinking prose gets compressed, and that's a small fraction of total output here.
