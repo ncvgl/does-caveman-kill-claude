@@ -8,7 +8,7 @@ Making LLMs talk like cavemen save output tokens ("why use many token when few t
 
 We tested here whether the [ultra caveman](https://github.com/JuliusBrussee/caveman) system prompt hurts **Claude Code + Haiku 4.5** on [SWE-bench Pro (public)](https://github.com/scaleapi/SWE-bench_Pro-os) ([HF dataset](https://huggingface.co/datasets/ScaleAI/SWE-bench_Pro_Public)).
 
-**Setup.** `claude -p --model claude-haiku-4-5`, budget cap $2/run, WebFetch/WebSearch disabled, all other tools ON. Each instance run twice, same user prompt; only one gets a `docs/caveman_ultra_system.md` prompt via `--append-system-prompt`. Grader = SWE-bench Pro's deterministic test runner.
+**Setup.** `claude -p --model claude-haiku-4-5`, budget cap $2/run, WebFetch/WebSearch disabled, all other tools ON. Each instance run twice, same user prompt; only one gets a [`docs/caveman_ultra_system.md`](docs/caveman_ultra_system.md) prompt via `--append-system-prompt`. Grader = SWE-bench Pro's deterministic test runner.
 
 **Instance selection.** Ranked all SWE-bench Pro Public instances by difficulty (% of  models that resolve each) and picked indices **100–200** — the frontier band: hard enough to stress the agent but easy enough that a resolve-rate difference is measurable.
 
