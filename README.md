@@ -1,7 +1,7 @@
 # Does Caveman Kill Claude Code Performance?
 
 
-TLDR; Caveman uses **~14% fewer output tokens**, with **no statistically significant quality degradation** when tested on a hundred agentic coding tasks. 
+TLDR; [Caveman](https://github.com/JuliusBrussee/caveman) uses **~14% fewer output tokens**, with **no statistically significant quality degradation** when tested on a hundred agentic coding tasks. 
 
 ## Setup
 Making LLMs talk like cavemen save output tokens ("why use many token when few token do trick"). 
