@@ -41,7 +41,7 @@ def main():
     n = len(savings)
     bins = np.arange(-110, 81, 10)
 
-    fig, ax = plt.subplots(figsize=(11, 5))
+    fig, ax = plt.subplots(figsize=(8, 4.5))
     counts, edges, patches = ax.hist(savings, bins=bins, edgecolor="white", linewidth=0.8)
 
     # colour bars by sign
@@ -66,21 +66,15 @@ def main():
     ax.axvline(mean, color="#222", linestyle=":", linewidth=1.2,
                label=f"mean = {mean:+.1f}%", zorder=2)
 
-    # give extra headroom so zone labels don't overlap bars
-    ax.set_ylim(0, max(counts) * 1.35)
-    ymax_top = ax.get_ylim()[1]
-    ax.text(-80, ymax_top * 0.93, "CAVEMAN USED MORE TOKENS",
-            ha="center", va="top", fontsize=10, fontweight="bold",
-            color="#a5232a")
-    ax.text(50, ymax_top * 0.93, "CAVEMAN SAVED TOKENS",
-            ha="center", va="top", fontsize=10, fontweight="bold",
-            color="#1f7a33")
+    ax.set_ylim(0, max(counts) * 1.20)
 
     ax.set_xlabel("Token savings per instance (%)  ← caveman used more | caveman used fewer →")
     ax.set_ylabel("Number of instances")
     ax.set_title(f"Per-instance output-token savings: caveman vs baseline  (n = {n})")
-    ax.set_xticks(bins)
-    ax.tick_params(axis="x", labelsize=8)
+    # major ticks every 20%, minor ticks every 10% (still binned at 10%)
+    ax.set_xticks(np.arange(-100, 81, 20))
+    ax.set_xticks(bins, minor=True)
+    ax.tick_params(axis="x", labelsize=9)
     ax.grid(axis="y", linestyle=":", alpha=0.5)
     ax.legend(loc="upper left", frameon=False)
 
