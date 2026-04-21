@@ -20,6 +20,8 @@ We tested here whether the [ultra caveman](https://github.com/JuliusBrussee/cave
 | Total cost | $38.06 | $33.66 | −12% |
 | Avg cost/run | $0.41 | $0.37 | −12% |
 | Avg output tokens/run | 15.3 k | 13.2 k | −14% |
+| Avg turns/run | 42.3 | 38.8 | −8% |
+| Avg duration/run | 5.17 min | 4.55 min | −12% |
 
 Resolved instances: 79 both / 7 baseline-only / 4 caveman-only / 2 neither / 8 experiment errors.
 
