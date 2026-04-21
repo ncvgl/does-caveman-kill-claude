@@ -29,7 +29,7 @@ Resolved instances: 79 both / 7 baseline-only / 4 caveman-only / 2 neither / 8 e
 
 ## Interpretation
 
-- The **14% output-token savings** is far below the ~65% the caveman repo advertises for natural-language chat. Reason: in an agentic coding loop, most tokens go to tool-call JSON, file contents, code edits, and patches — structured output that can't be compressed into caveman-speak. Only the model's narrative/thinking prose gets compressed, and that's a small fraction of total output here.
+- The **14% output-token savings** is far below the ~65% the caveman repo advertises for natural-language chat. Reason: in an agentic coding loop, most tokens go to tool-call JSON, file contents, code edits, and patches — **structured output that can't be compressed into caveman-speak**. Only the model's narrative/thinking prose gets compressed, and that's a small fraction of total output here.
 
 
 - Of the 79 instances both conditions resolved, only **3 produced byte-identical patches**. Those 76 divergent pairs agree on **where** to fix (61% touched the exact same file set) but not on **what** to change (43% of pairs have <30% line overlap) so essentially different implementations of the same fix, both passing the tests.
